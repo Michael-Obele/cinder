@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Server ServerConfig
 	App    AppConfig
+	Redis  RedisConfig
 }
 
 type ServerConfig struct {
@@ -18,6 +19,10 @@ type ServerConfig struct {
 
 type AppConfig struct {
 	LogLevel string // debug, info, warn, error
+}
+
+type RedisConfig struct {
+	URL string
 }
 
 func Load() (*Config, error) {
@@ -33,6 +38,7 @@ func Load() (*Config, error) {
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("app.loglevel", "info")
+	v.SetDefault("redis.url", "redis://localhost:6379")
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

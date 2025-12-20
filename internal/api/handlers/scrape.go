@@ -4,20 +4,21 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/scraper"
 	"github.com/standard-user/cinder/pkg/logger"
 )
 
 type ScrapeRequest struct {
-	URL string `json:"url" binding:"required,url"`
+	URL    string `json:"url" binding:"required,url"`
+	Render bool   `json:"render"`
 }
 
 type ScrapeHandler struct {
-	scraper domain.Scraper
+	service *scraper.Service
 }
 
-func NewScrapeHandler(s domain.Scraper) *ScrapeHandler {
-	return &ScrapeHandler{scraper: s}
+func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
+	return &ScrapeHandler{service: s}
 }
 
 func (h *ScrapeHandler) Scrape(c *gin.Context) {
@@ -28,7 +29,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		return
 	}
 
-	result, err := h.scraper.Scrape(c.Request.Context(), req.URL)
+	result, err := h.service.Scrape(c.Request.Context(), req.URL, req.Render)
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Scraping failed"})
