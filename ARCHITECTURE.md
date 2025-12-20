@@ -276,14 +276,14 @@ Leapcell is a serverless platform perfect for Go applications with async workers
    - Select your repository from the list
    - Configure the service:
 
-   | Field             | Value                                                                                                                                                             |
-   | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | **Runtime**       | Docker                                                                                                                                                            |
-   | **Build Command** | (Leave empty, uses Dockerfile)                                                                                                                                    |
-   | **Start Command** | (Leave empty, uses Dockerfile CMD)                                                                                                                                |
-   | **Port**          | `8080`                                                                                                                                                            |
+   | Field             | Value                                                                                    |
+   | ----------------- | ---------------------------------------------------------------------------------------- |
+   | **Runtime**       | Go (Any version)                                                                         |
+   | **Build Command** | `chmod +x install_browser.sh && ./install_browser.sh && go build -o app cmd/api/main.go` |
+   | **Start Command** | `export PATH=$PATH:. && ./app`                                                           |
+   | **Port**          | `8080`                                                                                   |
 
-   **Note**: Using **Docker** is the recommended way to deploy Cinder on Leapcell, especially for **Dynamic Scraping**, as it ensures the Chromium browser is correctly installed and configured in the environment.
+   **Note**: The `install_browser.sh` script installs a headless Chrome browser in the build environment and moves it to the application directory so `chromedp` can find it.
 
 4. **Environment Variables**:
    Add these in Leapcell dashboard:
@@ -319,6 +319,8 @@ curl -X POST https://your-app-name.leapcell.dev/v1/scrape \
 For production with heavy async workloads, consider:
 
 - **Separate Worker Service**: Deploy the worker (`./cinder-worker`) as a separate Leapcell service
+  - **Build Command**: `chmod +x install_browser.sh && ./install_browser.sh && go build -o worker cmd/worker/main.go`
+  - **Start Command**: `export PATH=$PATH:. && ./worker`
 - **Auto-scaling**: Leapcell scales automatically based on traffic
 - **Monitoring**: Check Leapcell dashboard for logs, metrics, and performance
 
