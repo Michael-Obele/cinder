@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -26,9 +27,17 @@ type CrawlHandler struct {
 }
 
 func NewCrawlHandler(redisAddr string) (*CrawlHandler, error) {
-	redisOpt, err := asynq.ParseRedisURI(redisAddr)
+	u, err := url.Parse(redisAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse redis uri: %w", err)
+		return nil, fmt.Errorf("failed to parse redis url: %w", err)
+	}
+
+	password, _ := u.User.Password()
+	addr := u.Host
+
+	redisOpt := asynq.RedisClientOpt{
+		Addr:     addr,
+		Password: password,
 	}
 	client := asynq.NewClient(redisOpt)
 	inspector := asynq.NewInspector(redisOpt)

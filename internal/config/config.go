@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -26,12 +27,13 @@ type RedisConfig struct {
 }
 
 func Load() (*Config, error) {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		// .env file not found or error, continue with env vars
+	}
+
 	v := viper.New()
 
-	// Read .env file
-	v.SetConfigName(".env")
-	v.SetConfigType("env")
-	v.AddConfigPath(".")
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -41,12 +43,7 @@ func Load() (*Config, error) {
 	v.SetDefault("app.loglevel", "info")
 	v.SetDefault("redis.url", "")
 
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err
-		}
-		// Config file not found is fine, we fallback to env/defaults
-	}
+	// No need for ReadInConfig since we use env vars
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {

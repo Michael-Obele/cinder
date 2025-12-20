@@ -3,6 +3,7 @@ package worker
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 
 	"github.com/hibiken/asynq"
@@ -36,12 +37,18 @@ func (l *AsynqLogger) Fatal(args ...interface{}) {
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
-	redisOpt, err := asynq.ParseRedisURI(cfg.Redis.URL)
+	redisURL := cfg.Redis.URL
+	u, err := url.Parse(redisURL)
 	if err != nil {
-		// Fallback to manual construction if URI parsing fails or isn't sufficient
-		// But mostly ParseRedisURI works fine for standard redis:// strings
-		// If it fails, we panic or handle it. Here we panic for simplicity in setup.
-		panic(err)
+		panic(fmt.Sprintf("failed to parse redis url: %v", err))
+	}
+
+	password, _ := u.User.Password()
+	addr := u.Host
+
+	redisOpt := asynq.RedisClientOpt{
+		Addr:     addr,
+		Password: password,
 	}
 
 	srv := asynq.NewServer(
