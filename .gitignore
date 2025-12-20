@@ -1,0 +1,56 @@
+# Go / build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage
+*.test
+*.out
+coverage.out
+
+# Build output directories
+bin/
+_build/
+dist/
+
+# Vendor directory (if vendored dependencies are used)
+vendor/
+
+# Compiled repository binary
+cinder
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and secret files
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+logs/
+
+# Node (if present)
+node_modules/
+
+# Misc
+# Ignore dependency caches, editor caches, and other local artifacts
+.cache/
+.pytest_cache/
+
+# Personal test files
+*.json
