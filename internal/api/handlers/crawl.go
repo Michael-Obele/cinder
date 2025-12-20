@@ -25,19 +25,17 @@ type CrawlHandler struct {
 	inspector *asynq.Inspector
 }
 
-func NewCrawlHandler(redisAddr string) *CrawlHandler {
+func NewCrawlHandler(redisAddr string) (*CrawlHandler, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisAddr)
 	if err != nil {
-		// Log error and potentially panic or handle it. 
-		// Since this is during startup, panic is often acceptable if config is wrong.
-		panic(fmt.Sprintf("failed to parse redis uri: %v", err))
+		return nil, fmt.Errorf("failed to parse redis uri: %w", err)
 	}
 	client := asynq.NewClient(redisOpt)
 	inspector := asynq.NewInspector(redisOpt)
 	return &CrawlHandler{
 		client:    client,
 		inspector: inspector,
-	}
+	}, nil
 }
 
 func (h *CrawlHandler) Close() {

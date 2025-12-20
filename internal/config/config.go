@@ -28,9 +28,10 @@ type RedisConfig struct {
 func Load() (*Config, error) {
 	v := viper.New()
 
-	v.SetConfigName("config")
+	// Read .env file
+	v.SetConfigName(".env")
+	v.SetConfigType("env")
 	v.AddConfigPath(".")
-	v.AddConfigPath("./internal/config")
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -38,7 +39,7 @@ func Load() (*Config, error) {
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("app.loglevel", "info")
-	v.SetDefault("redis.url", "redis://localhost:6379")
+	v.SetDefault("redis.url", "")
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

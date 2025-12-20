@@ -30,11 +30,23 @@ func main() {
 
 	// Initialize Handlers
 	scrapeHandler := handlers.NewScrapeHandler(scraperService)
-	crawlHandler := handlers.NewCrawlHandler(cfg.Redis.URL)
-	defer crawlHandler.Close()
+	
+	// Try to initialize crawl handler (requires Redis)
+	var crawlHandler *handlers.CrawlHandler
+	if cfg.Redis.URL != "" {
+		handler, err := handlers.NewCrawlHandler(cfg.Redis.URL)
+		if err != nil {
+			logger.Log.Warn("Redis not available, asynchronous crawling disabled", "error", err)
+		} else {
+			crawlHandler = handler
+			defer crawlHandler.Close()
+			logger.Log.Info("Asynchronous crawling enabled with Redis")
+		}
+	} else {
+		logger.Log.Warn("Redis URL not configured, asynchronous crawling disabled")
+	}
 
 	// 4. Init Router
-	// Router
 	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler)
 
 	// 5. Run Server

@@ -23,6 +23,12 @@ func main() {
 	logger.Init(cfg.App.LogLevel)
 	logger.Log.Info("Starting Cinder Worker")
 
+	// Check if Redis is configured
+	if cfg.Redis.URL == "" {
+		logger.Log.Warn("Redis URL not configured, worker cannot start. Use synchronous scraping only.")
+		os.Exit(0)
+	}
+
 	// 3. Initialize Scrapers
 	collyScraper := scraper.NewCollyScraper()
 	chromedpScraper := scraper.NewChromedpScraper()
