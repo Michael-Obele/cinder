@@ -1,0 +1,50 @@
+package config
+
+import (
+	"strings"
+
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	Server ServerConfig
+	App    AppConfig
+}
+
+type ServerConfig struct {
+	Port string
+	Mode string // debug, release, test
+}
+
+type AppConfig struct {
+	LogLevel string // debug, info, warn, error
+}
+
+func Load() (*Config, error) {
+	v := viper.New()
+
+	v.SetConfigName("config")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./internal/config")
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// Defaults
+	v.SetDefault("server.port", "8080")
+	v.SetDefault("server.mode", "debug")
+	v.SetDefault("app.loglevel", "info")
+
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, err
+		}
+		// Config file not found is fine, we fallback to env/defaults
+	}
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
