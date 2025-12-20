@@ -9,6 +9,8 @@ import (
 	"github.com/standard-user/cinder/internal/config"
 	"github.com/standard-user/cinder/internal/scraper"
 	"github.com/standard-user/cinder/pkg/logger"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -24,9 +26,20 @@ func main() {
 	logger.Log.Info("Starting Cinder API", "port", cfg.Server.Port, "mode", cfg.Server.Mode)
 
 	// 3. Init Scraper
+	var redisClient *redis.Client
+	if cfg.Redis.URL != "" {
+		opt, err := redis.ParseURL(cfg.Redis.URL)
+		if err != nil {
+			logger.Log.Warn("Invalid Redis URL", "error", err)
+		} else {
+			redisClient = redis.NewClient(opt)
+			logger.Log.Info("Redis caching enabled")
+		}
+	}
+
 	collyScraper := scraper.NewCollyScraper()
 	chromedpScraper := scraper.NewChromedpScraper()
-	scraperService := scraper.NewService(collyScraper, chromedpScraper)
+	scraperService := scraper.NewService(collyScraper, chromedpScraper, redisClient)
 
 	// Initialize Handlers
 	scrapeHandler := handlers.NewScrapeHandler(scraperService)

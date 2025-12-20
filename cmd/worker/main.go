@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/standard-user/cinder/internal/config"
 	"github.com/standard-user/cinder/internal/scraper"
 	"github.com/standard-user/cinder/internal/worker"
@@ -30,9 +31,17 @@ func main() {
 	}
 
 	// 3. Initialize Scrapers
+	// Create standard go-redis client for caching (asynq uses its own connection)
+	redisOpt, err := redis.ParseURL(cfg.Redis.URL)
+	if err != nil {
+		logger.Log.Error("Failed to parse Redis URI", "error", err)
+		os.Exit(1)
+	}
+	redisClient := redis.NewClient(redisOpt)
+
 	collyScraper := scraper.NewCollyScraper()
 	chromedpScraper := scraper.NewChromedpScraper()
-	scraperService := scraper.NewService(collyScraper, chromedpScraper)
+	scraperService := scraper.NewService(collyScraper, chromedpScraper, redisClient)
 
 	// 4. Initialize Asynq Server
 	srv := worker.NewServer(cfg, logger.Log)
