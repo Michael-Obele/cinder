@@ -3,6 +3,7 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -26,5 +27,6 @@ func NewScrapeTask(url string, render bool) (*asynq.Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal scrape payload: %w", err)
 	}
-	return asynq.NewTask(TypeScrape, data), nil
+	// Keep result for 24 hours
+	return asynq.NewTask(TypeScrape, data, asynq.Retention(24*time.Hour)), nil
 }

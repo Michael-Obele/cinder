@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -39,6 +40,14 @@ func NewCrawlHandler(redisAddr string) (*CrawlHandler, error) {
 		Addr:     addr,
 		Password: password,
 	}
+	
+	if u.Scheme == "rediss" {
+		redisOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: false, // Set to true for self-signed certs
+			MinVersion:         tls.VersionTLS12,
+		}
+	}
+
 	client := asynq.NewClient(redisOpt)
 	inspector := asynq.NewInspector(redisOpt)
 	return &CrawlHandler{

@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -49,6 +50,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     addr,
 		Password: password,
+	}
+
+	if u.Scheme == "rediss" {
+		redisOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: false,
+			MinVersion:         tls.VersionTLS12,
+		}
 	}
 
 	srv := asynq.NewServer(

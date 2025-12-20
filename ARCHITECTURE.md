@@ -278,12 +278,12 @@ Leapcell is a serverless platform perfect for Go applications with async workers
 
    | Field             | Value                                                                                                                                                             |
    | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | **Runtime**       | Go (Any version)                                                                                                                                                  |
-   | **Build Command** | `go mod tidy && go build -tags netgo -ldflags '-s -w' -o cinder-api cmd/api/main.go && go build -tags netgo -ldflags '-s -w' -o cinder-worker cmd/worker/main.go` |
-   | **Start Command** | `./cinder-api`                                                                                                                                                    |
+   | **Runtime**       | Docker                                                                                                                                                            |
+   | **Build Command** | (Leave empty, uses Dockerfile)                                                                                                                                    |
+   | **Start Command** | (Leave empty, uses Dockerfile CMD)                                                                                                                                |
    | **Port**          | `8080`                                                                                                                                                            |
 
-   **Note**: We're building both binaries but only starting the API. The worker would run as a separate service or background process.
+   **Note**: Using **Docker** is the recommended way to deploy Cinder on Leapcell, especially for **Dynamic Scraping**, as it ensures the Chromium browser is correctly installed and configured in the environment.
 
 4. **Environment Variables**:
    Add these in Leapcell dashboard:
