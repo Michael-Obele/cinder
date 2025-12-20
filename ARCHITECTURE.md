@@ -1,0 +1,354 @@
+# Cinder Architecture Guide (For JS/SvelteKit Developers)
+
+Welcome to the Cinder codebase! If you're coming from a SvelteKit/Node.js background, some Go patterns might feel "different." This guide bridges that gap by comparing Go's structure and syntax to the JS ecosystem you already know.
+
+## 🏗 High-Level Architecture
+
+Cinder is a Go-based distributed scraper (a lightweight alternative to Firecrawl). It uses a **Task Queue** pattern to handle long-running scrapes without blocking the main API.
+
+### Project Layout (Standard Go)
+
+- `/cmd`: Entry points (think of these as your `src/routes/api` endpoints or separate microservices).
+  - `api/main.go`: The web server.
+  - `worker/main.go`: The background process.
+- `/internal`: Private code. In Go, code here cannot be imported by other projects. This is where the core logic lives.
+- `/pkg`: Shared, reusable code (like a local utility library).
+- `/internal/domain`: The "Source of Truth." This defines the interfaces (like TypeScript types) that everyone must follow.
+
+---
+
+## 🔄 The "JS to Go" Rosetta Stone
+
+| Concept           | JS/SvelteKit Equivalent        | How it works in Cinder                                              |
+| :---------------- | :----------------------------- | :------------------------------------------------------------------ |
+| **Interfaces**    | TypeScript `interface` or Type | Decouples code. Any struct with a `Scrape()` method is a `Scraper`. |
+| **Gin**           | Express / Hono                 | The web framework used for routing and middleware.                  |
+| **Colly**         | Cheerio / Axios                | Fast, static HTML scraper.                                          |
+| **Chromedp**      | Puppeteer / Playwright         | Uses Headless Chrome for JS-heavy dynamic sites.                    |
+| **Asynq + Redis** | BullMQ + Redis                 | Manages the background "Crawl" jobs.                                |
+| **Goroutines**    | `Promise.all` / `async`        | Go's way of doing concurrent work (lightweight threads).            |
+| **slog**          | Pino / Winston                 | Structured logging for debugging.                                   |
+
+---
+
+## 🛣 Control Flow: Life of a Request
+
+### 1. Synchronous Scrape (`POST /v1/scrape`)
+
+Equivalent to a standard `await`ed API call in SvelteKit.
+
+1. `router.go` receives the request.
+2. `handlers/scrape.go` validates the input.
+3. `scraper/service.go` (The Orchestrator) decides: "Static or Dynamic?"
+4. `colly.go` or `chromedp.go` performs the work.
+5. Result is returned directly to the user.
+
+### 2. Asynchronous Crawl (`POST /v1/crawl`)
+
+Equivalent to pushing a job to **BullMQ** and returning a Job ID.
+
+1. `handlers/crawl.go` enqueues a task to **Redis**.
+2. API returns an `id` immediately (HTTP 202 Accepted).
+3. The **Worker** (`cmd/worker`) sees the task in Redis.
+4. `worker/handlers.go` takes the task and runs its logic.
+5. The result can be inspected later via the ID.
+
+---
+
+## 🛠 Patterns Used
+
+### Dependency Injection (Manual)
+
+In Go, we "wire up" our code in `main.go`. We create the Scrapers first, then pass them into the Service, which is then passed into the Handler. This is like passing props in Svelte, but for business logic.
+
+### Interface-Based Design
+
+Look at `internal/domain/scraper.go`. It defines what a "Scraper" is. Because of this, we can easily swap Colly for Chromedp or even add a third "AI Scraper" later without changing the API logic.
+
+---
+
+## 💻 Dev & Build Guide
+
+### Prerequisites
+
+Before you start, you'll need:
+
+- **Go 1.22+**: Download from [golang.org](https://golang.org/dl/)
+- **Redis**: For the async task queue
+  - Local: Install Redis server (`brew install redis` on macOS, `apt install redis-server` on Ubuntu)
+  - Or use a cloud Redis like Upstash/Leapcell Redis
+- **Git**: For cloning and version control
+
+### Environment Setup
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone <your-repo-url>
+   cd cinder
+   ```
+
+2. **Install dependencies**:
+
+   ```bash
+   go mod tidy
+   ```
+
+3. **Create environment file** (copy from example):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` with your values:
+
+   ```bash
+   REDIS_URL=redis://localhost:6379  # or rediss:// for TLS
+   API_KEY=your-secret-key           # for API authentication
+   ```
+
+4. **Start Redis** (if running locally):
+   ```bash
+   redis-server
+   ```
+
+### Building the Project
+
+#### Build Commands
+
+```bash
+# Build the API server
+go build -o bin/cinder-api cmd/api/main.go
+
+# Build the async worker
+go build -o bin/cinder-worker cmd/worker/main.go
+
+# Build both at once
+go build ./cmd/...
+```
+
+#### Cross-Compilation (Optional)
+
+```bash
+# Build for Linux (common for deployment)
+GOOS=linux GOARCH=amd64 go build -o bin/cinder-api-linux cmd/api/main.go
+
+# Build for different architectures
+GOOS=darwin GOARCH=arm64 go build -o bin/cinder-api-mac-arm64 cmd/api/main.go
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests for specific package
+go test ./internal/scraper/...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run tests with race detection
+go test -race ./...
+```
+
+### Running Locally
+
+#### Development Mode (API + Worker)
+
+1. **Start the API server**:
+
+   ```bash
+   go run cmd/api/main.go
+   ```
+
+   Server starts on `http://localhost:8080`
+
+2. **Start the async worker** (in another terminal):
+   ```bash
+   go run cmd/worker/main.go
+   ```
+
+#### Testing the API
+
+```bash
+# Test synchronous scraping
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-key" \
+  -d '{"url": "https://example.com", "renderJS": false}'
+
+# Test asynchronous crawling
+curl -X POST http://localhost:8080/v1/crawl \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-key" \
+  -d '{"url": "https://svelte.dev", "maxPages": 5}'
+
+# Check crawl status (replace JOB_ID with actual ID)
+curl http://localhost:8080/v1/crawl/JOB_ID
+```
+
+#### Development Workflow
+
+1. **Make changes** to code
+2. **Run tests**: `go test ./...`
+3. **Build**: `go build ./cmd/...`
+4. **Run locally**: `go run cmd/api/main.go` (and worker in another terminal)
+5. **Test endpoints** with curl or Postman
+6. **Check logs** for debugging
+7. **Commit and push** changes
+
+### Building with Docker
+
+The `Dockerfile` uses a **multi-stage build**:
+
+1. **Build stage**: Compiles Go code into optimized binaries
+2. **Runtime stage**: Creates minimal container with Chromium for dynamic scraping
+
+```bash
+# Build the Docker image
+docker build -t cinder .
+
+# Run the container
+docker run -p 8080:8080 --env-file .env cinder
+```
+
+### Docker Compose (Full Stack)
+
+```bash
+# Start everything (API, Worker, Redis)
+docker compose up --build
+
+# Start in background
+docker compose up -d
+
+# View logs
+docker compose logs -f api
+docker compose logs -f worker
+
+# Stop everything
+docker compose down
+```
+
+### Useful Commands
+
+- `go mod tidy`: Clean up dependencies
+- `go mod vendor`: Vendor dependencies (for Docker builds)
+- `go fmt ./...`: Format all Go code
+- `go vet ./...`: Static analysis for bugs
+- `go mod graph`: View dependency graph
+- `docker compose logs -f worker`: Watch worker process jobs
+- `redis-cli monitor`: Watch Redis commands in real-time
+
+---
+
+## 🚀 Deployment on Leapcell
+
+Leapcell is a serverless platform perfect for Go applications with async workers like Cinder. It offers pay-as-you-go pricing - you only pay when your service is processing requests.
+
+### Prerequisites
+
+- GitHub account
+- Leapcell account ([leapcell.io](https://leapcell.io))
+
+### Deployment Steps
+
+1. **Push your code to GitHub**:
+
+   ```bash
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+
+2. **Connect GitHub to Leapcell**:
+
+   - Go to [Leapcell Dashboard](https://leapcell.io/dashboard)
+   - Follow instructions to connect your GitHub account
+
+3. **Create a new service**:
+
+   - Click "New Service"
+   - Select your repository from the list
+   - Configure the service:
+
+   | Field             | Value                                                                                                                                                             |
+   | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Runtime**       | Go (Any version)                                                                                                                                                  |
+   | **Build Command** | `go mod tidy && go build -tags netgo -ldflags '-s -w' -o cinder-api cmd/api/main.go && go build -tags netgo -ldflags '-s -w' -o cinder-worker cmd/worker/main.go` |
+   | **Start Command** | `./cinder-api`                                                                                                                                                    |
+   | **Port**          | `8080`                                                                                                                                                            |
+
+   **Note**: We're building both binaries but only starting the API. The worker would run as a separate service or background process.
+
+4. **Environment Variables**:
+   Add these in Leapcell dashboard:
+   - `REDIS_URL`: Your Redis connection string (use Leapcell Redis or Upstash)
+   - `API_KEY`: Your API key for authentication
+
+### Redis Configuration for Leapcell
+
+Leapcell provides managed Redis. For TLS connections (required for Leapcell/Upstash Redis):
+
+```bash
+# In your .env or Leapcell env vars
+REDIS_URL=rediss://username:password@host:port
+```
+
+The code handles TLS automatically (see `internal/config/redis.go`).
+
+### Accessing Your Deployed App
+
+Once deployed, Leapcell provides a URL like `your-app-name.leapcell.dev`
+
+Test your deployment:
+
+```bash
+curl -X POST https://your-app-name.leapcell.dev/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{"url": "https://example.com"}'
+```
+
+### Scaling and Async Workers
+
+For production with heavy async workloads, consider:
+
+- **Separate Worker Service**: Deploy the worker (`./cinder-worker`) as a separate Leapcell service
+- **Auto-scaling**: Leapcell scales automatically based on traffic
+- **Monitoring**: Check Leapcell dashboard for logs, metrics, and performance
+
+### Continuous Deployments
+
+Every push to the connected branch automatically triggers a build and deploy. Failed builds are safely rolled back, keeping your service running.
+
+### Cost Optimization
+
+Leapcell's pay-as-you-go model is perfect for scrapers:
+
+- **Free quota**: Generous monthly free tier
+- **No idle costs**: Only pay for actual request processing
+- **Auto-scaling**: Scales down to zero when not in use
+
+### Troubleshooting
+
+- **Build failures**: Check Leapcell logs for Go compilation errors
+- **Runtime errors**: Verify environment variables and Redis connectivity
+- **TLS issues**: Ensure Redis URL uses `rediss://` for secure connections
+- **Worker issues**: If using separate worker service, check its logs too
+
+For help, join the [Leapcell Discord community](https://discord.gg/qF7efny8x2).
+
+---
+
+## 🚀 Future Insight: Suggestions for You
+
+As a SvelteKit dev, you might notice:
+
+1. **Frontend**: We could build a SvelteKit Dashboard that hits `/v1/crawl` and shows status in real-time.
+2. **Websockets**: We could add a websocket layer to notify the frontend when a crawl is finished.
+3. **Storage**: Currently, crawl results are logged. We should eventually save them to a DB (Postgres/Supabase) so your SvelteKit app can fetch them easily.

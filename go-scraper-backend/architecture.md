@@ -229,3 +229,194 @@ COPY .env .
 EXPOSE 8080
 CMD ["./api"]
 ```
+
+## 🛠️ Local Development Setup
+
+### Prerequisites
+
+- **Go 1.23+**: Download from [golang.org](https://golang.org/dl/)
+- **Redis**: For async queue processing
+  - Local: Install Redis server (`brew install redis` on macOS, `apt install redis-server` on Ubuntu)
+  - Or use a cloud Redis like Upstash/Leapcell Redis
+
+### Environment Setup
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone <your-repo-url>
+   cd go-scraper-backend
+   ```
+
+2. **Install dependencies**:
+
+   ```bash
+   go mod tidy
+   ```
+
+3. **Create environment file** (`.env`):
+
+   ```bash
+   # Copy from env.example
+   cp env.example .env
+
+   # Edit .env with your values:
+   REDIS_URL=redis://localhost:6379  # or rediss:// for TLS
+   API_KEY=your-secret-key           # for API authentication
+   ```
+
+4. **Start Redis** (if running locally):
+   ```bash
+   redis-server
+   ```
+
+### Building the Project
+
+```bash
+# Build the API server
+go build -o bin/api cmd/api/main.go
+
+# Build the async worker
+go build -o bin/worker cmd/worker/main.go
+
+# Or build both at once
+go build ./cmd/...
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests for specific package
+go test ./internal/scraper/...
+
+# Run tests with verbose output
+go test -v ./...
+```
+
+### Running Locally
+
+#### Development Mode (API + Worker)
+
+1. **Start the API server**:
+
+   ```bash
+   go run cmd/api/main.go
+   ```
+
+   Server starts on `http://localhost:8080`
+
+2. **Start the async worker** (in another terminal):
+   ```bash
+   go run cmd/worker/main.go
+   ```
+
+#### Testing the API
+
+```bash
+# Test scraping endpoint
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-key" \
+  -d '{"url": "https://example.com", "renderJS": false}'
+
+# Should return scraped content in JSON format
+```
+
+### Development Workflow
+
+1. **Make changes** to code
+2. **Run tests**: `go test ./...`
+3. **Build**: `go build ./cmd/...`
+4. **Run locally**: `go run cmd/api/main.go`
+5. **Test endpoints** with curl or Postman
+6. **Commit and push** changes
+
+## 🚀 Deployment on Leapcell
+
+Leapcell is a serverless platform that supports Go applications with pay-as-you-go pricing. Perfect for this scraper backend with its async processing capabilities.
+
+### Prerequisites
+
+- GitHub account
+- Leapcell account ([leapcell.io](https://leapcell.io))
+
+### Deployment Steps
+
+1. **Push your code to GitHub**:
+
+   ```bash
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+
+2. **Connect GitHub to Leapcell**:
+
+   - Go to [Leapcell Dashboard](https://leapcell.io/dashboard)
+   - Follow instructions to connect your GitHub account
+
+3. **Create a new service**:
+
+   - Click "New Service"
+   - Select your repository from the list
+   - Configure the service:
+
+   | Field             | Value                                                         |
+   | ----------------- | ------------------------------------------------------------- |
+   | **Runtime**       | Go (Any version)                                              |
+   | **Build Command** | `go mod tidy && go build -tags netgo -ldflags '-s -w' -o app` |
+   | **Start Command** | `./app`                                                       |
+   | **Port**          | `8080`                                                        |
+
+4. **Environment Variables**:
+   Add these in Leapcell dashboard:
+   - `REDIS_URL`: Your Redis connection string (use Leapcell Redis or Upstash)
+   - `API_KEY`: Your API key for authentication
+
+### Redis Configuration for Leapcell
+
+Leapcell provides Redis service. For TLS connections (required for Leapcell/Upstash Redis):
+
+```bash
+# In your .env or Leapcell env vars
+REDIS_URL=rediss://username:password@host:port
+```
+
+The code already handles TLS configuration (see Redis TLS Configuration section above).
+
+### Accessing Your Deployed App
+
+Once deployed, Leapcell provides a URL like `your-app-name.leapcell.dev`
+
+Test your deployment:
+
+```bash
+curl -X POST https://your-app-name.leapcell.dev/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{"url": "https://example.com"}'
+```
+
+### Continuous Deployments
+
+Every push to the connected branch automatically triggers a build and deploy. Failed builds are safely rolled back, keeping your service running.
+
+### Scaling and Monitoring
+
+- **Auto-scaling**: Leapcell automatically scales based on traffic
+- **Monitoring**: Check the Leapcell dashboard for logs, metrics, and performance
+- **Pay-as-you-go**: Only pay for actual usage - no charges when idle
+
+### Troubleshooting
+
+- **Build failures**: Check Leapcell logs for Go compilation errors
+- **Runtime errors**: Verify environment variables and Redis connectivity
+- **TLS issues**: Ensure Redis URL uses `rediss://` for secure connections
+
+For more help, join the [Leapcell Discord community](https://discord.gg/qF7efny8x2).
