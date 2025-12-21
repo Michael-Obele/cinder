@@ -8,6 +8,7 @@ import (
 	"github.com/standard-user/cinder/internal/api/handlers"
 	"github.com/standard-user/cinder/internal/config"
 	"github.com/standard-user/cinder/internal/scraper"
+	"github.com/standard-user/cinder/internal/search"
 	"github.com/standard-user/cinder/pkg/logger"
 
 	"github.com/redis/go-redis/v9"
@@ -42,8 +43,13 @@ func main() {
 	scraperService := scraper.NewService(collyScraper, chromedpScraper, redisClient)
 
 	// Initialize Handlers
+	// Initialize Handlers
 	scrapeHandler := handlers.NewScrapeHandler(scraperService)
-	
+
+	// Initialize Search Service (Brave)
+	braveService := search.NewBraveService(cfg.Brave.APIKey)
+	searchHandler := handlers.NewSearchHandler(braveService)
+
 	// Try to initialize crawl handler (requires Redis)
 	var crawlHandler *handlers.CrawlHandler
 	if cfg.Redis.URL != "" {
@@ -60,7 +66,7 @@ func main() {
 	}
 
 	// 4. Init Router
-	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler)
+	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler, searchHandler)
 
 	// 5. Run Server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
