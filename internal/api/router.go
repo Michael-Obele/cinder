@@ -10,7 +10,7 @@ import (
 	"github.com/standard-user/cinder/internal/config"
 )
 
-func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler) *gin.Engine {
+func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -23,6 +23,7 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	v1 := r.Group("/v1")
 	{
 		v1.POST("/scrape", scrapeHandler.Scrape)
+		v1.POST("/search", searchHandler.Search)
 		
 		// Only register crawl routes if Redis/crawl handler is available
 		if crawlHandler != nil {

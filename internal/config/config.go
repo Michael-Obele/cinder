@@ -12,6 +12,11 @@ type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	App    AppConfig    `mapstructure:"app"`
 	Redis  RedisConfig  `mapstructure:"redis"`
+	Brave  BraveConfig  `mapstructure:"brave"`
+}
+
+type BraveConfig struct {
+	APIKey string `mapstructure:"api_key"`
 }
 
 type ServerConfig struct {
@@ -48,7 +53,12 @@ func Load() (*Config, error) {
 	v.SetDefault("redis.url", "")
 	v.SetDefault("redis.host", "")
 	v.SetDefault("redis.port", "")
+	v.SetDefault("redis.port", "")
 	v.SetDefault("redis.password", "")
+	v.SetDefault("brave.api_key", "")
+
+	// Custom bindings
+	v.BindEnv("brave.api_key", "BRAVE_SEARCH_API_KEY")
 
 	// No need for ReadInConfig since we use env vars
 
@@ -63,7 +73,7 @@ func Load() (*Config, error) {
 		if port == "" {
 			port = "6379"
 		}
-		
+
 		addr := fmt.Sprintf("%s:%s", cfg.Redis.Host, port)
 		if cfg.Redis.Password != "" {
 			cfg.Redis.URL = fmt.Sprintf("redis://:%s@%s", cfg.Redis.Password, addr)

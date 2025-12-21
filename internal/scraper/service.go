@@ -26,9 +26,14 @@ func NewService(colly domain.Scraper, chromedp domain.Scraper, redis *redis.Clie
 	}
 }
 
-func (s *Service) Scrape(ctx context.Context, url string, render bool) (*domain.ScrapeResult, error) {
+func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.ScrapeResult, error) {
+	// Default to smart if empty
+	if mode == "" {
+		mode = "smart"
+	}
+
 	// 1. Try Cache
-	cacheKey := fmt.Sprintf("scrape:%s:%t", url, render)
+	cacheKey := fmt.Sprintf("scrape:%s:%s", url, mode)
 	if s.redis != nil {
 		val, err := s.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
@@ -47,16 +52,62 @@ func (s *Service) Scrape(ctx context.Context, url string, render bool) (*domain.
 	var result *domain.ScrapeResult
 	var err error
 
-	if render {
+	// Helper to run dynamic
+	runDynamic := func() (*domain.ScrapeResult, error) {
 		if s.chromedp == nil {
 			return nil, fmt.Errorf("dynamic scraper not configured")
 		}
-		result, err = s.chromedp.Scrape(ctx, url)
-	} else {
+		return s.chromedp.Scrape(ctx, url)
+	}
+
+	// Helper to run static
+	runStatic := func() (*domain.ScrapeResult, error) {
 		if s.colly == nil {
 			return nil, fmt.Errorf("static scraper not configured")
 		}
-		result, err = s.colly.Scrape(ctx, url)
+		return s.colly.Scrape(ctx, url)
+	}
+
+	switch mode {
+	case "dynamic":
+		result, err = runDynamic()
+	case "static":
+		result, err = runStatic()
+	case "smart":
+		// Fallthrough to smart logic
+		// 1. Try static first (fast & cheap)
+		result, err = runStatic()
+
+		// If static failed or produced suspicious content, try dynamic
+		needsDynamic := false
+		if err != nil {
+			// If it's a 403/Forbidden, dynamic might help (headless often gets past basic blocks)
+			// For now, let's treat errors as candidates for retry if we want robustness.
+			// However, simple connectivity errors won't be fixed by headless.
+			// Let's focus on content heuristics for now.
+			// If err IS NOT nil, we return it, UNLESS we want to be very aggressive.
+			// Let's keep it simple: if static fails, we fail, unless it's a specific "empty response" error we added.
+		} else if result != nil {
+			// Check heuristics
+			if ShouldUseDynamic(result.HTML) {
+				needsDynamic = true
+			}
+		}
+
+		if needsDynamic {
+			fmt.Printf("Smart Scraper: Heuristics detected dynamic content for %s. Switching to Chromedp.\n", url)
+			dynamicResult, dynErr := runDynamic()
+			if dynErr == nil {
+				result = dynamicResult
+			} else {
+				// If dynamic fails but static succeeded, return static?
+				// Or fail because the page is likely broken?
+				// Let's return dynamic error if static was deemed insufficient.
+				err = dynErr
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unknown mode: %s", mode)
 	}
 
 	if err != nil {

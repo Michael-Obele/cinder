@@ -14,7 +14,8 @@ const (
 
 type ScrapePayload struct {
 	URL    string `json:"url"`
-	Render bool   `json:"render"`
+	Render bool   `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode   string `json:"mode"`   // "smart", "static", "dynamic"
 }
 
 // NewScrapeTask creates a new task for scraping a URL.
