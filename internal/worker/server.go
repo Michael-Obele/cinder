@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/standard-user/cinder/internal/config"
@@ -62,13 +63,16 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 	srv := asynq.NewServer(
 		redisOpt,
 		asynq.Config{
-			Concurrency: 10,
+			Concurrency: 2, // Reduced to save Redis connections/ops
 			Queues: map[string]int{
 				"critical": 6,
 				"default":  3,
 				"low":      1,
 			},
-			Logger: &AsynqLogger{logger: logger},
+			// Check for new tasks every 5 seconds instead of 1s
+			// This drastically reduces Redis command count for idle workers
+			TaskCheckInterval: 5 * time.Second,
+			Logger:            &AsynqLogger{logger: logger},
 		},
 	)
 

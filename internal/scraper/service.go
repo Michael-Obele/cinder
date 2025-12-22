@@ -1,8 +1,11 @@
 package scraper
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 
 	"encoding/json"
 	"time"
@@ -37,13 +40,34 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.
 	if s.redis != nil {
 		val, err := s.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
-			var result domain.ScrapeResult
-			if err := json.Unmarshal([]byte(val), &result); err == nil {
-				if result.Metadata == nil {
-					result.Metadata = make(map[string]string)
+			// Try decompressing
+			// Note: val is string, convert to byte
+			b := bytes.NewReader([]byte(val))
+			gz, err := gzip.NewReader(b)
+			if err == nil {
+				defer gz.Close()
+				decompressed, err := io.ReadAll(gz)
+				if err == nil {
+					var result domain.ScrapeResult
+					if err := json.Unmarshal(decompressed, &result); err == nil {
+						if result.Metadata == nil {
+							result.Metadata = make(map[string]string)
+						}
+						result.Metadata["cached"] = "true"
+						return &result, nil
+					}
 				}
-				result.Metadata["cached"] = "true"
-				return &result, nil
+			} else {
+				// Fallback: maybe it's legacy uncompressed data?
+				// Try unmarshal directly
+				var result domain.ScrapeResult
+				if err := json.Unmarshal([]byte(val), &result); err == nil {
+					if result.Metadata == nil {
+						result.Metadata = make(map[string]string)
+					}
+					result.Metadata["cached"] = "true"
+					return &result, nil
+				}
 			}
 		}
 	}
@@ -118,7 +142,14 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.
 	if s.redis != nil {
 		data, err := json.Marshal(result)
 		if err == nil {
-			s.redis.Set(ctx, cacheKey, data, 24*time.Hour)
+			// Compress data
+			var b bytes.Buffer
+			gz := gzip.NewWriter(&b)
+			if _, err := gz.Write(data); err == nil {
+				gz.Close()
+				// Store for 7 days as requested (low storage usage allows this)
+				s.redis.Set(ctx, cacheKey, b.Bytes(), 7*24*time.Hour)
+			}
 		}
 	}
 

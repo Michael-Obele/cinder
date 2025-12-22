@@ -28,6 +28,6 @@ func NewScrapeTask(url string, render bool) (*asynq.Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal scrape payload: %w", err)
 	}
-	// Keep result for 24 hours
-	return asynq.NewTask(TypeScrape, data, asynq.Retention(24*time.Hour)), nil
+	// Keep result for 7 days
+	return asynq.NewTask(TypeScrape, data, asynq.Retention(7*24*time.Hour)), nil
 }
