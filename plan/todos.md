@@ -41,3 +41,11 @@
 - [ ] **Rate Limiting**: Add `gin-contrib/rate` or custom Redis rate limiter.
 - [ ] **Cleanup**: Ensure `defer cancel()` is called on all contexts to prevent memory leaks.
 - [ ] **Documentation**: Generate Swagger/OpenAPI spec if needed.
+
+## Phase 5: High Performance & Reliability (Leapcell/Upstash)
+
+- [ ] **Refactor Scraper**: Move `chromedp` Allocator to a specific Service/Singleton to reuse the browser process.
+- [ ] **Tuning**: Increase Worker concurrency to `5+` and reduce Asynq polling interval (`1s`).
+- [ ] **Smart Waiting**: Implement `WaitVisible` or Network Idle detection in `chromedp.go`.
+- [ ] **Stability**: Implement periodic browser restarts (every ~100 scrapes) to prevent memory leaks.
+- [ ] **Resilience**: Tune Redis timeouts for high-latency environments.

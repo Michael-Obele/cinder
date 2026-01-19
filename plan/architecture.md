@@ -57,6 +57,8 @@ go-scraper-backend/
 
 This allows us to switch between Colly and Chromedp easily.
 
+**Optimization Note:** For `Chromedp`, we use a **Shared Allocator** pattern. We spin up one Chrome instance at startup and create lightweight "tabs" (Contexts) for each request. This saves ~1s per request.
+
 ```go
 // internal/domain/scraper.go
 

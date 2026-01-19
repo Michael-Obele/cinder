@@ -76,6 +76,7 @@ Since you are new to Go, we have chosen "boring" (stable, popular) technology to
 
 ## 📚 Key Resources
 
+- [Performance & Reliability Plan](./performance_reliability/implementation_plan.md) - **New!** Optimization Strategy
 - [Architecture & Code Samples](./architecture.md) - **Start Here for Code**
 - [API Specification](./api-spec.md) - Request/Response formats
 - [Environment Setup](./env.example) - Redis & Auth config
