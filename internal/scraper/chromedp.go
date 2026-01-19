@@ -12,19 +12,11 @@ import (
 )
 
 type ChromedpScraper struct {
+	allocCtx context.Context
+	cancel   context.CancelFunc
 }
 
 func NewChromedpScraper() *ChromedpScraper {
-	return &ChromedpScraper{}
-}
-
-func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
-	// Create context
-	// We use the parent context to respect timeouts/cancellation
-	// But we also need an allocator.
-	// For now, we assume a local chrome instance or a default allocator.
-	// In production (Docker), we might need to point to a remote allocator or use default with specific flags.
-	
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
@@ -33,14 +25,45 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.Scrap
 		chromedp.UserAgent("Mozilla/5.0 (compatible; CinderBot/1.0; +http://github.com/standard-user/cinder)"),
 	)
 
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancelAlloc()
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 
-	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
+	// We start a mock run to ensure the browser process starts immediately,
+	// rather than waiting for the first request.
+	go func() {
+		ctx, c := chromedp.NewContext(allocCtx)
+		defer c()
+		if err := chromedp.Run(ctx); err != nil {
+			logger.Log.Error("Failed to start initial browser process", "error", err)
+		}
+	}()
+
+	return &ChromedpScraper{
+		allocCtx: allocCtx,
+		cancel:   cancel,
+	}
+}
+
+func (s *ChromedpScraper) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+}
+
+func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
+	// Create a new tab (Context) from the existing allocator
+	// This is much faster than starting a new browser process
+	taskCtx, cancelTask := chromedp.NewContext(s.allocCtx)
 	defer cancelTask()
 
 	// Set a hard timeout for the browser actions
-	taskCtx, cancelTimeout := context.WithTimeout(taskCtx, 60*time.Second)
+	// Use the parent context's deadline if available, otherwise default to 60s
+	// But we must respect the parent context cancellation
+	timeout := 60 * time.Second
+	if dl, ok := ctx.Deadline(); ok {
+		timeout = time.Until(dl)
+	}
+	
+	taskCtx, cancelTimeout := context.WithTimeout(taskCtx, timeout)
 	defer cancelTimeout()
 
 	var htmlContent string

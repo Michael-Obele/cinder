@@ -63,15 +63,14 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 	srv := asynq.NewServer(
 		redisOpt,
 		asynq.Config{
-			Concurrency: 2, // Reduced to save Redis connections/ops
+			Concurrency: 10, // Increased to 10 for higher throughput on 4GB RAM
 			Queues: map[string]int{
 				"critical": 6,
 				"default":  3,
 				"low":      1,
 			},
-			// Check for new tasks every 5 seconds instead of 1s
-			// This drastically reduces Redis command count for idle workers
-			TaskCheckInterval: 5 * time.Second,
+			// Check for new tasks every 1 second (Snappy response)
+			TaskCheckInterval: 1 * time.Second,
 			Logger:            &AsynqLogger{logger: logger},
 		},
 	)

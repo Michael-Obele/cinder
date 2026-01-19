@@ -9,8 +9,10 @@ import (
 	"github.com/standard-user/cinder/internal/config"
 	"github.com/standard-user/cinder/internal/scraper"
 	"github.com/standard-user/cinder/internal/search"
+	"github.com/standard-user/cinder/internal/worker"
 	"github.com/standard-user/cinder/pkg/logger"
 
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -40,6 +42,7 @@ func main() {
 
 	collyScraper := scraper.NewCollyScraper()
 	chromedpScraper := scraper.NewChromedpScraper()
+	defer chromedpScraper.Close()
 	scraperService := scraper.NewService(collyScraper, chromedpScraper, redisClient)
 
 	// Initialize Handlers
@@ -60,6 +63,20 @@ func main() {
 			crawlHandler = handler
 			defer crawlHandler.Close()
 			logger.Log.Info("Asynchronous crawling enabled with Redis")
+
+			// Monolith Mode: Start Embedded Worker if enabled (defaulting to TRUE for Hobby Tier)
+			if os.Getenv("DISABLE_WORKER") != "true" {
+				logger.Log.Info("Starting Embedded Worker (Monolith Mode)")
+				workerServer := worker.NewServer(cfg, logger.Log)
+				mux := asynq.NewServeMux()
+				worker.RegisterHandlers(mux, scraperService, logger.Log)
+
+				go func() {
+					if err := workerServer.Run(mux); err != nil {
+						logger.Log.Error("Embedded Worker failed", "error", err)
+					}
+				}()
+			}
 		}
 	} else {
 		logger.Log.Warn("Redis URL not configured, asynchronous crawling disabled")
