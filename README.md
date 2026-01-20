@@ -1,22 +1,23 @@
 # Cinder 🔥
 
-**Cinder** is a high-performance, self-hosted web scraping API built with Go. It is designed to be a drop-in alternative to Firecrawl, capable of turning any website into LLM-ready markdown.
+<!-- [![Go Version](https://img.shields.io/github/go-mod/go-version/standard-user/cinder)](https://golang.org) -->
 
-**Note:** This repository is currently private.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/standard-user/cinder)
 
-Currently, the project has completed **Phase 1: Setup & Static Scraping**, **Phase 2: Dynamic Scraping**, and **Phase 3: Async Queue**, with **Phase 4: Polish & Auth** in progress.
+**Cinder** is a high-performance, self-hosted web scraping API built with Go. It turns any website into LLM-ready markdown, designed as a drop-in alternative to Firecrawl.
+
+> **Why Cinder?** Heavily optimized for low-memory, serverless, and "hobby tier" environments by using intelligent browser process management and a unified "monolith" architecture.
 
 ---
 
-## 🎯 Goal
+## ✨ Features
 
-Build a robust scraping service that can:
-
-1. **Scrape**: Extract clean Markdown from any URL.
-2. **Render**: Handle complex JavaScript/SPA sites (React, Vue, etc.) using a headless browser.
-3. **Queue**: Manage heavy crawl jobs asynchronously using Redis.
-4. **Scale**: Deploy easily via Docker with low memory footprint.
-5. **Evade**: Rotate User Agents automatically to avoid bot detection.
+- **⚡ Fast & Efficient**: Reuses a single Chrome process with lightweight tabs, avoiding the heavy startup cost of spawning browsers per request.
+- **🏭 Monolith Mode**: Runs the API and Async Worker in a single binary/container. Perfect for services like Railway or Leapcell where you pay per active container.
+- **🔄 Async Queues**: Redis-backed job queue (Asynq) for handling heavy scrape jobs without blocking HTTP clients.
+- **🧠 LLM Ready**: Converts complex HTML/SPAs into clean, structured Markdown using `html-to-markdown/v2`.
+- **🕵️ Evasion**: Automatic User-Agent rotation and un-detected headless flags.
 
 ---
 
@@ -24,130 +25,122 @@ Build a robust scraping service that can:
 
 ### Prerequisites
 
-- **Go 1.25+** installed.
-- (Optional) Redis (for async features).
-- (Optional) Docker (for containerized deployment).
-
-### Environment Setup
-
-Copy the example environment file and configure it:
-
-```bash
-cp go-scraper-backend/env.example .env
-```
-
-Edit `.env` with your settings. Key variables:
-
-- `PORT`: Server port (default: 8080)
-- `GIN_MODE`: Gin mode (`debug` or `release`)
-- `LOG_LEVEL`: Logging level (`info`, `debug`, etc.)
-- `API_KEY`: Simple API key for authentication (set to protect endpoints)
-- `REDIS_URL`: Redis connection URL (required for async crawling)
-- `MAX_CONCURRENCY`: Max concurrent scrapes (default: 5)
+- **Go 1.25+**
+- **Redis** (Required for async crawling, optional for simple scraping)
+- **Chromium** (Installed automatically by `chromedp` or via Docker)
 
 ### Installation
 
 ```bash
-git clone https://github.com/Michael-Obele/cinder.git
+git clone https://github.com/standard-user/cinder.git
 cd cinder
 go mod download
 ```
 
-### Running the API
+### Configuration (.env)
+
+```dotenv
+PORT=8080
+API_KEY=secret_key
+# Redis is required for /crawl endpoints and async jobs
+REDIS_URL=redis://localhost:6379
+# Set to 'true' to run api and worker separately (Microservices mode)
+# Default is 'false' (Monolith mode)
+DISABLE_WORKER=false
+```
+
+### Running
+
+**Option 1: Monolith Mode (Recommended)**
+Runs the API server and the Queue Worker in the same process.
 
 ```bash
-# Run the API server directly
 go run ./cmd/api
-
-# Or build and run the binary
-go build -o bin/cinder ./cmd/api
-./bin/cinder
 ```
 
-### Testing
+**Option 2: Docker**
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run with coverage
-go test -cover ./...
+docker build -t cinder .
+docker run -p 8080:8080 cinder
 ```
 
 ---
 
-## 📁 Project Structure
+## 🔌 API Endpoints
 
-- `cmd/api/` — API server entrypoint (`main.go`) 🔧
-- `cmd/worker/` — Async worker server entrypoint (`main.go`) ⏰
-- `go-scraper-backend/` — Project documentation and planning 📚
-- `internal/` — Internal packages
-  - `api/` — Router and HTTP handlers (`router.go`, `handlers/scrape.go`)
-  - `config/` — Configuration loader using Viper (`config.go`)
-  - `domain/` — Domain models and interfaces (`scraper.go`)
-  - `scraper/` — Scraper implementations (`colly.go`, `chromedp.go`)
-  - `worker/` — Async task definitions and handlers (`tasks.go`, `handlers.go`)
-- `pkg/logger/` — Structured logging helper (`logger.go`)
-- `go.mod` — Go module definition
-- `Dockerfile` — Docker image with Chromium for dynamic scraping
+### 1. Synchronous Scrape
 
----
+Best for single pages. Blocks until done.
+`POST /scrape`
 
-## 🛠️ Tech Stack
+```json
+{
+  "url": "https://example.com"
+}
+```
 
-- **Language**: Go (1.25+)
-- **Web Framework**: [Gin](https://github.com/gin-gonic/gin)
-- **Static Scraper**: [Colly](https://github.com/gocolly/colly)
-- **Dynamic Scraper**: [Chromedp](https://github.com/chromedp/chromedp)
-- **Async Queue**: [Asynq](https://github.com/hibiken/asynq) with Redis
-- **HTML -> Markdown**: [html-to-markdown/v2](https://github.com/JohannesKaufmann/html-to-markdown)
-- **Config**: [Viper](https://github.com/spf13/viper)
-- **User Agents**: [gofakeit](https://github.com/brianvoe/gofakeit)
+### 2. Async Crawl
+
+Best for entire sites. Returns a Job ID.
+`POST /crawl`
+
+```json
+{
+  "url": "https://example.com/blog",
+  "depth": 2
+}
+```
 
 ---
 
-## 🔗 Documentation
+## 🏗️ Architecture
 
-Detailed documentation can be found in the `go-scraper-backend/` directory:
+Cinder uses a **Tiered Scraping** approach:
 
-- **[Overview & Index](go-scraper-backend/index.md)**: High-level goals and tech stack.
-- **[API Specification](go-scraper-backend/api-spec.md)**: Request/Response formats for endpoints.
-- **[Architecture Notes](go-scraper-backend/architecture.md)**: Deep dive into the system design.
-- **[Actionable Todos](go-scraper-backend/todos.md)**: Current progress and upcoming tasks (Phases 1-3 completed, Phase 4 in progress).
+1.  **Request**: API accepts JSON.
+2.  **Dispatch**:
+    - **Simple**: Handled immediately.
+    - **Complex**: Pushed to Redis Queue.
+3.  **Optimization**:
+    - **Browser**: A specific `ChromedpScraper` singleton maintains a `ExecAllocator`.
+    - **Tabs**: Requests spawn `NewContext` (tabs) on the existing browser, saving ~500ms per request.
 
----
-
-## ✨ Roadmap
-
-- **Phase 1: Setup & Static Scraping** ✅
-  - Basic static scraping with Colly.
-- **Phase 2: Dynamic Scraping** ✅
-  - Chromedp integration for JS-rendered sites.
-  - Dockerfile with Chromium support.
-- **Phase 3: Async Jobs & Queues** ✅
-  - Redis-backed job queue using Asynq.
-  - Support for large-scale domain crawling.
-- **Phase 4: Production Hardening** 🚧
-  - API Key Authentication.
-  - Rate limiting and enhanced observability.
+See [plan/architecture.md](plan/architecture.md) for details.
 
 ---
 
-## 🤝 Internal contributions
+## 🗺️ Roadmap & Status
 
-This repository is currently private. Internal contributions should follow the team's workflow — if you'd like to contribute, please contact the repository owner to get access and guidance.
+| Phase       | Goal                          | Status         |
+| :---------- | :---------------------------- | :------------- |
+| **Phase 1** | Static Scraping (Colly)       | ✅ Done        |
+| **Phase 2** | Dynamic Scraping (Chromedp)   | ✅ Done        |
+| **Phase 3** | Async Queue (Asynq + Redis)   | ✅ Done        |
+| **Phase 4** | Performance Tuning (Monolith) | ✅ Done        |
+| **Phase 5** | Hardening & Testing           | 🚧 In Progress |
 
-Suggested guidelines for internal contributors:
+**Current Focus**:
 
-- **Branching:** use `feature/<short-desc>` or `fix/<short-desc>` for branches.
-- **Testing:** run `go test ./...` before opening a PR.
-- **PRs:** open pull requests against the `main` branch with a short description and any relevant test or reproduction steps.
-- **Code Style:** keep changes focused and avoid unrelated refactors in the same PR.
+- Adding a comprehensive Unit & Integration Test Suite (Currently 0% coverage).
+- Implementing "Smart Wait" heuristics for slower SPAs.
+- Adding a "Browser Health Check" to kill/restart Chrome after N scrapes.
 
-If you do not have access, open an issue or contact the maintainer to request contributor access.
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+**Please Note**: We are currently focused on adding **Tests**. If you submit a PR, please try to include a `_test.go` file for your logic.
+
+1. Fork the Project
+2. Create your Feature Branch
+3. Commit your Changes
+4. Push to the Branch
+5. Open a Pull Request
 
 ---
 
 ## ⚖️ License
 
-This project is currently unlicensed. See the repository for updates.
+Distributed under the MIT License. See `LICENSE` for more information.
