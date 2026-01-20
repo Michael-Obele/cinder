@@ -17,13 +17,13 @@ type CrawlRequest struct {
 }
 
 type CrawlResponse struct {
-	ID string `json:"id"`
-	URL string `json:"url"`
-	Render bool `json:"render"`
+	ID     string `json:"id"`
+	URL    string `json:"url"`
+	Render bool   `json:"render"`
 }
 
 type CrawlHandler struct {
-	client *asynq.Client
+	client    *asynq.Client
 	inspector *asynq.Inspector
 }
 
@@ -40,7 +40,7 @@ func NewCrawlHandler(redisAddr string) (*CrawlHandler, error) {
 		Addr:     addr,
 		Password: password,
 	}
-	
+
 	if u.Scheme == "rediss" {
 		redisOpt.TLSConfig = &tls.Config{
 			InsecureSkipVerify: false, // Set to true for self-signed certs
@@ -95,7 +95,7 @@ func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 	// Let's assume 'default' queue for now or check 'critical'/'low' if allowed.
 	// A better way is using `inspector.GetTaskInfo` (it DOES require queue name).
 	// For simplicity, we'll try "default". If not found, we might return error.
-	
+
 	// Wait, generic GetTaskInfo might not exist across queues.
 	// Let's check simply providing queue "default".
 	if err != nil {
@@ -118,6 +118,6 @@ func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 		"max_retry": info.MaxRetry,
 		"retried":   info.Retried,
 		"payload":   string(info.Payload),
-		"result":    string(info.Result), 
+		"result":    string(info.Result),
 	})
 }

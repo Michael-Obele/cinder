@@ -35,7 +35,7 @@ func main() {
 	inspector := asynq.NewInspector(redisOpt)
 
 	taskID := "8c1cbc9b-a3b9-45dd-a319-e97f75dbd511" // From logs
-	
+
 	fmt.Printf("Checking task %s in 'default' queue...\n", taskID)
 	info, err := inspector.GetTaskInfo("default", taskID)
 	if err != nil {

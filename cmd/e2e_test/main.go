@@ -140,7 +140,7 @@ func runCrawlTest(targetURL string, outputPath string) (string, error) {
 			fmt.Printf("Polling error: %v\n", err)
 			continue
 		}
-		
+
 		body, _ := io.ReadAll(statusResp.Body)
 		statusResp.Body.Close()
 

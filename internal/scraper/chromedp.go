@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	md "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/chromedp/chromedp"
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/pkg/logger"
 )
@@ -62,12 +62,12 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.Scrap
 	if dl, ok := ctx.Deadline(); ok {
 		timeout = time.Until(dl)
 	}
-	
+
 	taskCtx, cancelTimeout := context.WithTimeout(taskCtx, timeout)
 	defer cancelTimeout()
 
 	var htmlContent string
-	
+
 	logger.Log.Info("Chromedp Scraping", "url", url)
 
 	err := chromedp.Run(taskCtx,

@@ -24,7 +24,7 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	{
 		v1.POST("/scrape", scrapeHandler.Scrape)
 		v1.POST("/search", searchHandler.Search)
-		
+
 		// Only register crawl routes if Redis/crawl handler is available
 		if crawlHandler != nil {
 			v1.POST("/crawl", crawlHandler.EnqueueCrawl)
