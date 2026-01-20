@@ -23,7 +23,9 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	v1 := r.Group("/v1")
 	{
 		v1.POST("/scrape", scrapeHandler.Scrape)
+		v1.GET("/scrape", scrapeHandler.Scrape)
 		v1.POST("/search", searchHandler.Search)
+		v1.GET("/search", searchHandler.Search)
 
 		// Only register crawl routes if Redis/crawl handler is available
 		if crawlHandler != nil {

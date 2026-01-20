@@ -162,9 +162,15 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 		})
 	}
 
-	// Estimate total count (Brave doesn't provide this, so we estimate)
-	// In reality, this would need to be obtained differently or from a separate endpoint
-	estimatedTotal := opts.Offset + len(results) + 100 // Conservative estimate
+	// Determine total count
+	// Brave API doesn't always provide a stable totalCount field for web results
+	// We use the count of returned results and the requested limit to estimate if more exist
+	estimatedTotal := opts.Offset + len(results)
+	if len(results) >= opts.Limit && opts.Limit > 0 {
+		// If we got as many results as we asked for, assume there might be more
+		// We'll signal that there are at least 100 more results to keep pagination going
+		estimatedTotal += 100
+	}
 
 	return results, estimatedTotal, nil
 }

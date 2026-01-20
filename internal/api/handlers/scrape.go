@@ -24,9 +24,29 @@ func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
 
 func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	var req ScrapeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Log.Warn("Invalid request", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URL"})
+	
+	// Try to bind from JSON first (POST)
+	if c.Request.Method == http.MethodPost && c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			logger.Log.Warn("Invalid check", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+			return
+		}
+	}
+
+	// Parse parameters from query strings (GET or POST)
+	if url := c.Query("url"); url != "" {
+		req.URL = url
+	}
+	if mode := c.Query("mode"); mode != "" {
+		req.Mode = mode
+	}
+	if render := c.Query("render"); render == "true" {
+		req.Render = true
+	}
+
+	if req.URL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "URL is required"})
 		return
 	}
 

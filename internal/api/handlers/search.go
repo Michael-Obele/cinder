@@ -39,12 +39,22 @@ func NewSearchHandler(s search.Service) *SearchHandler {
 
 func (h *SearchHandler) Search(c *gin.Context) {
 	var req SearchRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	
+	// Try to bind from JSON first (POST)
+	if c.Request.Method == http.MethodPost && c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
-	// Parse offset and limit from query params if provided (alternative to JSON body)
+	// Parse parameters from query params (works for both GET and POST)
+	if q := c.Query("query"); q != "" {
+		req.Query = q
+	} else if q := c.Query("q"); q != "" { // Support 'q' as common alias
+		req.Query = q
+	}
+	
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if offset, err := strconv.Atoi(offsetStr); err == nil {
 			req.Offset = offset
@@ -54,6 +64,12 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		if limit, err := strconv.Atoi(limitStr); err == nil {
 			req.Limit = limit
 		}
+	}
+
+	// Validate query
+	if req.Query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter is required"})
+		return
 	}
 
 	// Set defaults
