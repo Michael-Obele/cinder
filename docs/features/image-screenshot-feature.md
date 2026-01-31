@@ -6,15 +6,20 @@
 
 ## Overview
 
-This document outlines a comprehensive plan to add image and screenshot capture capabilities to the Cinder search service. The feature will allow users to retrieve images from search results and capture website screenshots, enhancing the search experience with visual content.
+This document outlines a comprehensive plan to add image and screenshot capture capabilities to the Cinder services. The feature will allow users to retrieve images and capture screenshots primarily from **scraped websites**, enhancing the data extraction capabilities, while also supporting search result enrichment.
 
 ### Current State
 
-The Cinder search service (`internal/search/service.go`) currently returns text-based search results from the Brave Search API with pagination support and rate limiting.
+- **Search Service** (`internal/search`): Returns text-based results from Brave Search.
+- **Scrape Service** (`internal/scraper`): Fetches HTML/Markdown using Colly or Chromedp. Returns `domain.ScrapeResult`.
 
 ### Goal
 
-Extend the search service to optionally include images and website screenshots alongside text results, maintaining backward compatibility.
+Extend the **Scrape Service** (and optionally Search Service) to:
+
+1.  Capture full-page or viewport screenshots of the scraped URL.
+2.  Extract main images from the scraped content.
+3.  Return these assets in a structured format.
 
 ---
 
@@ -22,109 +27,67 @@ Extend the search service to optionally include images and website screenshots a
 
 ### New Service Layer Structure
 
+We will move image-related data structures to the `internal/domain` layer to ensure they are accessible by both the Scraper and Search services (avoiding circular dependencies).
+
 ```
 cinder/
 ├── internal/
+│   ├── domain/
+│   │   ├── scraper.go          (EXISTING - Update ScrapeResult)
+│   │   └── media.go            (NEW - Image/Screenshot structs)
+│   ├── scraper/
+│   │   ├── chromedp.go         (EXISTING - Add screenshot logic)
+│   │   ├── colly.go            (EXISTING - Add image extraction)
+│   │   └── service.go          (EXISTING)
 │   ├── search/
-│   │   ├── service.go          (EXISTING - will extend Result struct)
-│   │   └── service_test.go
-│   ├── image/                  (NEW)
-│   │   ├── service.go          (NEW - image fetching interface)
-│   │   ├── screenshot.go       (NEW - screenshot capture)
-│   │   ├── processor.go        (NEW - image processing)
-│   │   └── service_test.go     (NEW)
-│   └── cache/                  (NEW)
-│       └── image_cache.go      (NEW - optional caching)
+│   │   ├── service.go          (EXISTING - Helper usage)
+│   ├── image/                  (NEW - Optional helper service)
+│   │   ├── processor.go        (Image resizing/optimization)
+│   │   └── service.go          (Shared logic)
 └── docs/
     └── features/
         └── image-screenshot-feature.md (THIS FILE)
 ```
 
-### Why Separate Services?
+### Architecture Decision
 
-Following the **Single Responsibility Principle**, the image service handles all visual content operations independently from text search. This prevents the search service from becoming bloated and allows for:
-
-- Independent testing
-- Separate error handling
-- Optional feature enablement
-- Future extensibility (e.g., image recognition, OCR)
+We place the core data models (`ImageData`, `ScreenshotData`) in `internal/domain` so they can be used by `ScrapeResult` (in `domain`) and optionally `SearchResult` (in `search`). The extraction logic resides in the respective scrapers (`chromedp`/`colly`), while shared processing logic (resizing, uploading) goes into `internal/image`.
 
 ---
 
-## 2. Data Structures to Create
+## 2. Data Structures
 
-### 2.1 Extending the Result Struct
+### 2.1 New Domain Models
 
-**File:** `internal/search/service.go`
-
-**Current:**
+**File:** `internal/domain/media.go` (New File)
 
 ```go
-type Result struct {
-    Title       string  `json:"title"`
-    URL         string  `json:"url"`
-    Description string  `json:"description"`
-    ID          string  `json:"id"`
-    Domain      string  `json:"domain"`
-    Relevance   float64 `json:"relevance"`
-}
-```
+package domain
 
-**Modified To Include:**
+import "time"
 
-```go
-type Result struct {
-    Title       string         `json:"title"`
-    URL         string         `json:"url"`
-    Description string         `json:"description"`
-    ID          string         `json:"id"`
-    Domain      string         `json:"domain"`
-    Relevance   float64        `json:"relevance"`
-    // NEW FIELDS
-    Images      []ImageData    `json:"images,omitempty"`
-    Screenshot  *ScreenshotData `json:"screenshot,omitempty"`
-    FaviconURL  string         `json:"favicon_url,omitempty"`
-}
-```
-
-### 2.2 New Image Data Structures
-
-**File:** `internal/image/service.go`
-
-```go
-// ImageData represents a single image from a search result
+// ImageData represents a single image found on a page
 type ImageData struct {
     URL        string `json:"url"`
-    Title      string `json:"title"`
-    Width      int    `json:"width"`
-    Height     int    `json:"height"`
-    Format     string `json:"format"`        // "png", "jpeg", "webp"
-    Size       int64  `json:"size"`          // bytes
-    SourceType string `json:"source_type"`   // "og:image", "favicon", "search-result"
-    Alt        string `json:"alt,omitempty"` // alt text if available
+    Title      string `json:"title,omitempty"`
+    Alt        string `json:"alt,omitempty"`
+    Width      int    `json:"width,omitempty"`
+    Height     int    `json:"height,omitempty"`
+    Format     string `json:"format,omitempty"` // "png", "jpeg", "webp"
+    Size       int64  `json:"size,omitempty"`   // bytes
+    SourceType string `json:"source_type"`      // "og:image", "favicon", "content"
 }
 
 // ScreenshotData represents a captured website screenshot
 type ScreenshotData struct {
-    Data       []byte    `json:"data"`        // base64 encoded in JSON
-    Format     string    `json:"format"`      // "png", "jpeg"
+    Data       []byte    `json:"data,omitempty"` // Base64 encoded in JSON
+    URL        string    `json:"url,omitempty"`  // If stored externally
+    Format     string    `json:"format"`         // "png", "jpeg"
     Width      int       `json:"width"`
     Height     int       `json:"height"`
+    FullPage   bool      `json:"full_page"`
     CapturedAt time.Time `json:"captured_at"`
-    Error      string    `json:"error,omitempty"` // if capture failed
-}
-
-// ImageMetadata contains technical details about an image
-type ImageMetadata struct {
-    Dimensions struct {
-        Width  int
-        Height int
-    }
-    Format       string
-    Size         int64
-    ColorSpace   string
-    HasAlpha     bool
-    IsAnimated   bool
+    Error      string    `json:"error,omitempty"`
 }
 
 // ScreenshotOptions configures screenshot capture behavior
@@ -137,136 +100,114 @@ type ScreenshotOptions struct {
     Format         string        // "png" or "jpeg"
     Quality        int           // 1-100 for jpeg quality
     BlockAds       bool          // block ad scripts
-    BlockTrackers  bool          // block tracking scripts
 }
 ```
 
-### 2.3 Updated SearchOptions
+### 2.2 Updated ScrapeResult
 
-**File:** `internal/search/service.go`
+**File:** `internal/domain/scraper.go`
+
+**Current:**
+
+```go
+type ScrapeResult struct {
+	URL      string            `json:"url"`
+	Markdown string            `json:"markdown"`
+	HTML     string            `json:"html,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+```
+
+**Modified:**
+
+```go
+type ScrapeResult struct {
+	URL        string            `json:"url"`
+	Markdown   string            `json:"markdown"`
+	HTML       string            `json:"html,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+    // NEW FIELDS
+    Screenshot *ScreenshotData   `json:"screenshot,omitempty"`
+    Images     []ImageData       `json:"images,omitempty"`
+}
+```
+
+### 2.3 ScrapeOptions & SearchOptions
+
+We need to update **SearchOptions** in `internal/search` and create/update **ScrapeOptions** in `internal/domain` (or passed as args).
+
+**File:** `internal/search/service.go` (SearchOptions)
 
 ```go
 type SearchOptions struct {
-    Query          string
-    Offset         int
-    Limit          int
-    IncludeDomains []string
-    ExcludeDomains []string
-    RequiredText   []string
-    MaxAge         *int
-    Mode           string
-    // NEW FIELDS
-    IncludeImages    bool             // fetch images for results
-    IncludeScreenshot bool            // capture website screenshots
-    ImageLimit       int              // max images per result (default 3)
-    ScreenshotOpts   *ScreenshotOptions // screenshot configuration
+    // ... existing fields ...
+    IncludeImages    bool
+    IncludeScreenshot bool
+}
+```
+
+**File:** `internal/domain/scraper.go` (ScrapeOptions)
+
+```go
+type ScrapeOptions struct {
+    URL            string
+    Mode           string // "static", "dynamic", "smart"
+    Screenshot     bool   // Enable screenshot capture
+    ExtractImages  bool   // Extract image metadata
+    ScreenshotOpts *ScreenshotOptions
 }
 ```
 
 ---
 
-## 3. Service Interfaces
+## 3. Service Strategy
 
-### 3.1 Image Service Interface
+### 3.1 Chromedp Scraper (Screenshots)
 
-**File:** `internal/image/service.go`
+**File:** `internal/scraper/chromedp.go`
+
+The `chromedp` scraper is best suited for screenshots. We will implement `CaptureScreenshot` logic within its `Scrape` method.
 
 ```go
-package image
-
-import (
-    "context"
-)
-
-// Service defines the image operations interface
-type Service interface {
-    // FetchImage downloads and returns image bytes from a URL
-    FetchImage(ctx context.Context, url string) ([]byte, *ImageMetadata, error)
-
-    // CaptureScreenshot captures a website screenshot using headless browser
-    CaptureScreenshot(ctx context.Context, url string, opts ScreenshotOptions) ([]byte, *ImageMetadata, error)
-
-    // GetImageMetadata extracts metadata without downloading full image
-    GetImageMetadata(ctx context.Context, url string) (*ImageMetadata, error)
-
-    // ExtractPageImages extracts all images from a webpage
-    ExtractPageImages(ctx context.Context, url string, limit int) ([]ImageData, error)
-}
-
-// ImageProcessor handles image manipulation
-type ImageProcessor interface {
-    // Resize scales an image to specified dimensions
-    Resize(data []byte, width, height int) ([]byte, error)
-
-    // Compress reduces image file size
-    Compress(data []byte, quality int) ([]byte, error)
-
-    // Convert changes image format
-    Convert(data []byte, fromFormat, toFormat string) ([]byte, error)
+// Pseudo-code
+func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts ScrapeOptions) (*domain.ScrapeResult, error) {
+    // ... navigate ...
+    if opts.Screenshot {
+       // chromedp.FullScreenshot(...)
+    }
+    // ...
 }
 ```
+
+### 3.2 Colly Scraper (Image Extraction)
+
+**File:** `internal/scraper/colly.go`
+
+Colly will be enhanced to parse `<img>` tags and populate `ScrapeResult.Images`.
 
 ---
 
 ## 4. Implementation Strategy
 
-### Phase 1: Foundation (No Breaking Changes)
+### Phase 1: Domain & Foundation
 
-#### Step 1: Create Image Service Stub
+1.  **Domain Models**: Create `internal/domain/media.go` and update `ScrapeResult` in `scraper.go`.
+2.  **Image Service**: Create `internal/image` for image processing/resizing utils (using `disintegration/imaging`).
 
-- Create `internal/image/service.go` with interface definitions
-- Implement a basic `HTTPImageService` using existing `http.Client`
-- Add simple image validation (MIME type checking)
-- **Impact:** Zero impact on existing search functionality
+### Phase 2: Scraper Implementation (Core)
 
-#### Step 2: Extend Result Struct
+1.  **Chromedp**: Implement screenshot capture in `internal/scraper/chromedp.go`.
+    - Add `CaptureScreenshot` logic.
+    - Handle `ScreenshotOptions` (size, format).
+2.  **Colly**: Implement image extraction in `internal/scraper/colly.go`.
+    - Extract `src` from `<img>` tags.
+    - Basic filtering (dimensions, tracking pixels).
+3.  **Service**: Update `internal/scraper/service.go` `Scrape` method to accept options and pass them down.
 
-- Add optional image fields to `Result` struct with `omitempty` tags
-- Update JSON marshaling tests
-- **Impact:** Backward compatible—old clients ignore new fields
+### Phase 3: Integration & Search
 
-#### Step 3: Update SearchOptions
-
-- Add image-related options with defaults
-- Default to `IncludeImages: false` and `IncludeScreenshot: false`
-- **Impact:** Existing code works unchanged
-
-#### Step 4: Add Image Processor
-
-- Integrate `github.com/disintegration/imaging` for basic operations
-- Support resize and format conversion
-- **Impact:** Optional feature, doesn't affect core search
-
-### Phase 2: Screenshot Capture
-
-#### Step 5: Implement Headless Browser Integration
-
-- Add `github.com/chromedp/chromedp` dependency
-- Create `ChromeScreenshotService` with connection pooling
-- Implement timeout and error handling
-- **Impact:** Optional feature flag controls activation
-
-#### Step 6: Browser Pool Management
-
-- Create `BrowserPool` to manage Chrome connections
-- Implement graceful shutdown
-- Add concurrent request limits (default 3-5)
-- **Impact:** Isolated to screenshot service
-
-### Phase 3: Integration
-
-#### Step 7: Wire Services Together
-
-- Create `ImageServiceFactory` for dependency injection
-- Add configuration options for enabling/disabling features
-- Integrate with existing search workflow
-- **Impact:** Configurable—can be disabled via settings
-
-#### Step 8: Add Caching Layer (Optional)
-
-- Implement in-memory cache with TTL
-- Add cache invalidation strategies
-- **Impact:** Performance optimization, doesn't affect functionality
+1.  Update `Search` service to optionally utilize the Scraper to fetch screenshots for top results (if requested).
+2.  Ensure backward compatibility for existing consumers.
 
 ---
 
@@ -434,37 +375,27 @@ results, _, err := s.Search(ctx, SearchOptions{Query: "golang"})
 
 ## 9. Implementation Checklist
 
-### Phase 1: Foundation
+### Phase 1: Domain & Foundation
 
-- [ ] Create `internal/image/service.go` with interfaces
-- [ ] Create `internal/image/processor.go` with imaging integration
-- [ ] Extend `Result` struct in `internal/search/service.go`
-- [ ] Update `SearchOptions` struct
-- [ ] Write tests for backward compatibility
-- [ ] Update README with new optional fields
+- [ ] Create `internal/domain/media.go` (Structs)
+- [ ] Update `internal/domain/scraper.go` (`ScrapeResult`, `ScrapeOptions`)
+- [ ] Create `internal/image` package (Processor logic)
 
-### Phase 2: Screenshots
+### Phase 2: Scraper Implementation
 
-- [ ] Create `internal/image/screenshot.go`
-- [ ] Implement `ChromeScreenshotService`
-- [ ] Create browser pool manager
-- [ ] Add connection pool tests
-- [ ] Document Chrome installation requirements
+- [ ] Update `internal/scraper/chromedp.go`: Add screenshot capture
+- [ ] Update `internal/scraper/colly.go`: Add image extraction
+- [ ] Update `internal/scraper/service.go`: Wire options to specific scrapers
 
-### Phase 3: Integration
+### Phase 3: Search Integration (Optional)
 
-- [ ] Create `ImageServiceFactory` for dependency injection
-- [ ] Wire image service into search workflow
-- [ ] Add configuration loading
-- [ ] Create integration tests
-- [ ] Add examples in `examples/` directory
+- [ ] Update `internal/search/service.go`: Extend `Result` struct
+- [ ] Implement logic to enrich search results via Scraper (if needed)
 
-### Phase 4: Optimization (Optional)
+### Phase 4: Infrastructure
 
-- [ ] Implement image caching layer
-- [ ] Add cache invalidation strategy
-- [ ] Performance benchmarks
-- [ ] Load testing with concurrent requests
+- [ ] Add configuration for screenshot size/quality
+- [ ] Update Dockerfile/Setup for Chrome dependencies (if not already present)
 
 ---
 
@@ -472,21 +403,22 @@ results, _, err := s.Search(ctx, SearchOptions{Query: "golang"})
 
 ### Modified Files
 
-| File                         | Changes                                                 |
-| ---------------------------- | ------------------------------------------------------- |
-| `internal/search/service.go` | Add image fields to Result struct, extend SearchOptions |
-| `go.mod`                     | Add chromedp, imaging dependencies                      |
+| File                           | Changes                                         |
+| ------------------------------ | ----------------------------------------------- |
+| `internal/domain/scraper.go`   | Add `Screenshot` and `Images` to `ScrapeResult` |
+| `internal/scraper/service.go`  | Update method signatures / options handling     |
+| `internal/scraper/chromedp.go` | Implement screenshot logic                      |
+| `internal/scraper/colly.go`    | Implement image extraction                      |
+| `internal/search/service.go`   | (Optional) Add metadata fields                  |
+| `go.mod`                       | Add dependencies                                |
 
 ### New Files
 
-| File                                        | Purpose                                          |
-| ------------------------------------------- | ------------------------------------------------ |
-| `internal/image/service.go`                 | Image fetching interface and HTTP implementation |
-| `internal/image/screenshot.go`              | Screenshot capture using chromedp                |
-| `internal/image/processor.go`               | Image processing/manipulation                    |
-| `internal/image/service_test.go`            | Unit tests for image service                     |
-| `internal/config/image_config.go`           | Configuration for image features                 |
-| `docs/features/image-screenshot-feature.md` | This documentation                               |
+| File                              | Purpose                                 |
+| --------------------------------- | --------------------------------------- |
+| `internal/domain/media.go`        | Shared image/screenshot data structures |
+| `internal/image/processor.go`     | Image manipulation utilities            |
+| `internal/config/image_config.go` | Configuration                           |
 
 ---
 
