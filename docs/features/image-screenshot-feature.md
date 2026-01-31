@@ -152,8 +152,11 @@ type SearchOptions struct {
 type ScrapeOptions struct {
     URL            string
     Mode           string // "static", "dynamic", "smart"
-    Screenshot     bool   // Enable screenshot capture
-    ExtractImages  bool   // Extract image metadata
+
+    // OPTIONAL FEATURES (Resource Control)
+    Screenshot     bool   // If true, loads images and captures screenshot (Heavier)
+    ExtractImages  bool   // If true, extracts image metadata (Lightweight)
+
     ScreenshotOpts *ScreenshotOptions
 }
 ```
@@ -168,14 +171,42 @@ type ScrapeOptions struct {
 
 The `chromedp` scraper is best suited for screenshots. We will implement `CaptureScreenshot` logic within its `Scrape` method.
 
+#### Resource Optimization Strategy
+
+To ensure efficiency and optionality as requested:
+
+1.  **Optional Screenshots**: Screenshots are only captured if `ScrapeOptions.Screenshot` is true.
+2.  **Bandwidth Saving**: If `ScrapeOptions.Screenshot` is **false**, we will explicitly block image resources to save bandwidth and speed up loading.
+    - Use `network.SetBlockedURLs` with patterns like `*.png`, `*.jpg`, `*.gif`.
+3.  **Lazy Extraction**: `ImageData` extraction in dynamic mode will parse the DOM (which exists even if images are blocked) rather than downloading the image content.
+
 ```go
-// Pseudo-code
+// Pseudo-code implementation logic for Scrape method
 func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts ScrapeOptions) (*domain.ScrapeResult, error) {
-    // ... navigate ...
-    if opts.Screenshot {
-       // chromedp.FullScreenshot(...)
+
+    // 1. Setup Tasks
+    tasks := []chromedp.Action{}
+
+    // RESOURCE OPTIMIZATION: Block images if we don't need a screenshot
+    if !opts.Screenshot {
+        tasks = append(tasks, network.Enable(), network.SetBlockedURLs([]string{
+            "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "image/*",
+        }))
     }
-    // ...
+
+    // 2. Navigation
+    tasks = append(tasks,
+        chromedp.Navigate(url),
+        // ... wait for load ...
+    )
+
+    // 3. Screenshot Capture (Optional)
+    if opts.Screenshot {
+        // ... implementation of screenshot capture ...
+        // Note: Images must NOT be blocked here for screenshot to look correct
+    }
+
+    // ... execute tasks ...
 }
 ```
 
@@ -199,8 +230,9 @@ Colly will be enhanced to parse `<img>` tags and populate `ScrapeResult.Images`.
 1.  **Chromedp**: Implement screenshot capture in `internal/scraper/chromedp.go`.
     - Add `CaptureScreenshot` logic.
     - Handle `ScreenshotOptions` (size, format).
+    - **Optimization**: Implement `network.SetBlockedURLs` to block images when `Screenshot=false` to save bandwidth.
 2.  **Colly**: Implement image extraction in `internal/scraper/colly.go`.
-    - Extract `src` from `<img>` tags.
+    - Extract `src` from `<img>` tags (Lightweight, no download required).
     - Basic filtering (dimensions, tracking pixels).
 3.  **Service**: Update `internal/scraper/service.go` `Scrape` method to accept options and pass them down.
 
