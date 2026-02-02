@@ -1,0 +1,111 @@
+# Leapcell Deployment Configuration for cinder-js
+# Documentation: https://docs.leapcell.io/
+
+name: cinder-js
+
+# Build configuration
+build:
+  # Use Dockerfile for custom build
+  dockerfile: Dockerfile
+  
+  # Build context
+  context: .
+  
+  # Build arguments (if needed)
+  args:
+    - NODE_ENV=production
+
+# Service configuration
+service:
+  # Port the application listens on
+  port: 8080
+  
+  # Health check configuration
+  health_check:
+    path: /health
+    interval: 30s
+    timeout: 10s
+    start_period: 10s
+    retries: 3
+
+# Resource allocation
+resources:
+  # Memory limit (critical for cinder-js)
+  memory: 4GB
+  
+  # CPU allocation
+  cpu: 2
+
+# Environment variables
+env:
+  # Required
+  - name: NODE_ENV
+    value: production
+    
+  - name: PORT
+    value: "8080"
+    
+  # Redis connection (from Leapcell secrets or Upstash)
+  - name: REDIS_URL
+    secret: redis-url
+    
+  # Optional: Log level
+  - name: LOG_LEVEL
+    value: info
+    
+  # Playwright configuration
+  - name: PLAYWRIGHT_BROWSERS_PATH
+    value: /ms-playwright
+    
+  - name: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+    value: "1"
+
+# Scaling configuration
+scaling:
+  # Minimum instances (keep-warm)
+  min_instances: 1
+  
+  # Maximum instances
+  max_instances: 3
+  
+  # Scale based on CPU/Memory
+  metrics:
+    - type: cpu
+      target: 70
+    - type: memory
+      target: 80
+
+# Networking
+networking:
+  # Enable external access
+  external: true
+  
+  # Custom domain (optional)
+  # domain: api.cinder.example.com
+
+# Secrets (reference external secrets manager)
+secrets:
+  - name: redis-url
+    # Set via Leapcell dashboard or CLI
+    
+  # Optional: API key for authentication
+  - name: api-key
+
+# Volumes (if persistent storage needed)
+# volumes:
+#   - name: cache
+#     path: /app/cache
+#     size: 1GB
+
+# Startup configuration
+startup:
+  # Maximum time to wait for service to be ready
+  timeout: 60s
+  
+  # Command to run on startup (overrides Dockerfile CMD if set)
+  # command: bun run src/index.ts
+
+# Shutdown configuration  
+shutdown:
+  # Grace period for graceful shutdown
+  grace_period: 30s
