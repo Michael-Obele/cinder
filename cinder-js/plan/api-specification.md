@@ -111,7 +111,9 @@ Readiness check (includes Redis, browser status).
 
 Scrape a single URL and return content.
 
-**Request Body:**
+> 📖 **See also:** [Response Format Specification](./response-format-specification.md) for full output format details, TypeScript types, and metadata schemas.
+
+**Request Body (Basic):**
 ```json
 {
   "url": "https://example.com",
@@ -119,30 +121,90 @@ Scrape a single URL and return content.
 }
 ```
 
-| Field  | Type   | Required | Description                                                    |
-| ------ | ------ | -------- | -------------------------------------------------------------- |
-| `url`  | string | ✅        | URL to scrape (http/https)                                     |
-| `mode` | string | ❌        | Scraping mode: `static`, `dynamic`, `smart` (default: `smart`) |
-
-**Response:**
+**Request Body (Extended):**
 ```json
 {
   "url": "https://example.com",
+  "mode": "smart",
+  "formats": ["markdown", "html", "links"],
+  "includeScreenshot": false,
+  "extractMetadata": true,
+  "detectFramework": false
+}
+```
+
+| Field               | Type     | Required | Description                                                                                            |
+| ------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `url`               | string   | ✅        | URL to scrape (http/https)                                                                             |
+| `mode`              | string   | ❌        | Scraping mode: `static`, `dynamic`, `smart` (default: `smart`)                                         |
+| `formats`           | string[] | ❌        | Output formats: `markdown`, `html`, `rawHtml`, `text`, `links`, `screenshot` (default: `["markdown"]`) |
+| `includeScreenshot` | boolean  | ❌        | Include page screenshot (requires `dynamic` mode)                                                      |
+| `extractMetadata`   | boolean  | ❌        | Extract SEO metadata (default: `true`)                                                                 |
+| `detectFramework`   | boolean  | ❌        | Detect CMS/framework used (default: `false`)                                                           |
+
+**Response (Basic):**
+```json
+{
   "markdown": "# Example Domain\n\nThis domain is for use in illustrative examples...",
-  "html": "<!DOCTYPE html>...",
   "metadata": {
     "title": "Example Domain",
     "description": "Example domain for documentation",
-    "scraped_at": "2026-02-02T10:30:00Z",
+    "ogTitle": "Example Domain",
+    "ogImage": null,
+    "language": "en"
+  },
+  "scrapeInfo": {
+    "url": "https://example.com",
+    "statusCode": 200,
     "engine": "cheerio",
-    "mode": "static"
+    "mode": "static",
+    "cacheHit": false,
+    "scrapedAt": "2026-02-02T10:30:00Z",
+    "latencyMs": 245
+  }
+}
+```
+
+**Response (Extended with multiple formats):**
+```json
+{
+  "markdown": "# Example Domain\n\nThis domain is...",
+  "html": "<article><h1>Example Domain</h1>...</article>",
+  "links": [
+    {"href": "https://www.iana.org/domains/example", "text": "More information", "isInternal": false}
+  ],
+  "metadata": {
+    "title": "Example Domain",
+    "description": "Example domain for documentation",
+    "ogTitle": "Example Domain",
+    "ogDescription": "Example domain for documentation",
+    "ogImage": null,
+    "ogUrl": "https://example.com",
+    "twitterCard": null,
+    "favicon": "https://example.com/favicon.ico",
+    "language": "en",
+    "generator": null,
+    "framework": null
+  },
+  "scrapeInfo": {
+    "url": "https://example.com",
+    "sourceUrl": "https://example.com",
+    "statusCode": 200,
+    "contentType": "text/html; charset=utf-8",
+    "engine": "cheerio",
+    "mode": "static",
+    "cacheHit": false,
+    "scrapedAt": "2026-02-02T10:30:00Z",
+    "latencyMs": 312,
+    "redirects": 0,
+    "redirectChain": []
   }
 }
 ```
 
 **Status Codes:**
 - `200` - Success
-- `400` - Invalid request (bad URL, invalid mode)
+- `400` - Invalid request (bad URL, invalid mode, invalid formats)
 - `422` - Scrape failed (site unreachable, timeout)
 - `500` - Internal server error
 - `503` - Service unavailable (browser not initialized)

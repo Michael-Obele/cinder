@@ -24,12 +24,13 @@ This documentation package evaluates the feasibility of porting **Cinder** (a Go
 
 ### Technical Specifications
 
-| Document                                                    | Description                                             | Priority |
-| ----------------------------------------------------------- | ------------------------------------------------------- | -------- |
-| [**Smart Mode Heuristics**](./smart-mode-heuristics.md)     | Dynamic content detection algorithms and fallback chain | 🟡 High   |
-| [**Anti-Detection Strategy**](./anti-detection-strategy.md) | Stealth scraping and bot evasion patterns               | 🟡 High   |
-| [**Queue Architecture**](./queue-architecture.md)           | BullMQ configuration and worker thread patterns         | 🟡 High   |
-| [**API Specification**](./api-specification.md)             | Endpoint documentation and request/response schemas     | 🟢 Medium |
+| Document                                                                | Description                                             | Priority |
+| ----------------------------------------------------------------------- | ------------------------------------------------------- | -------- |
+| [**Smart Mode Heuristics**](./smart-mode-heuristics.md)                 | Dynamic content detection algorithms and fallback chain | 🟡 High   |
+| [**Anti-Detection Strategy**](./anti-detection-strategy.md)             | Stealth scraping and bot evasion patterns               | 🟡 High   |
+| [**Queue Architecture**](./queue-architecture.md)                       | BullMQ configuration and worker thread patterns         | 🟡 High   |
+| [**Response Format Specification**](./response-format-specification.md) | Output formats, metadata schema, TypeScript definitions | 🟡 High   |
+| [**API Specification**](./api-specification.md)                         | Endpoint documentation and request/response schemas     | 🟢 Medium |
 
 ### Performance & Operations
 
