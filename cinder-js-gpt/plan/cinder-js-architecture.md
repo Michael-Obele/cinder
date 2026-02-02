@@ -1,0 +1,117 @@
+# Cinder-JS Architecture & ADRs
+
+## Executive Summary
+Cinder-JS is a **documentation-only** proposal for porting the Go-based Cinder scraping API to **Bun + Hono** while preserving the monolith deployment pattern (API + worker in one container). The proposal is **conditionally viable** if the following can be proven in benchmarks:
+
+- **Cold start** under 5 seconds on Leapcell
+- **Memory under 2GB** with 10 concurrent dynamic scrapes
+- **Queue throughput** at 1000+ jobs/hour with 4GB RAM
+
+**Recommendation**: **Go** for a prototype/benchmark phase, **conditional Go/No-Go** for production pending memory-per-context and cold-start validation.
+
+## System Goals
+- Match current Cinder API behavior and response schema.
+- Preserve smart mode fallback chain and monolith deployment model.
+- Keep operational simplicity for Leapcell deployments.
+- Maintain anti-detection capabilities comparable to undetected-chromedp.
+
+## Proposed System Topology
+```
+┌─────────────────────────────────────────────┐
+│                 Container                   │
+│                                             │
+│  ┌─────────────┐   ┌──────────────────────┐ │
+│  │ Hono API    │◄─►│ BullMQ Queue         │ │
+│  │ /v1/scrape  │   │ (Redis-backed)       │ │
+│  │ /v1/crawl   │   └─────────┬────────────┘ │
+│  └─────┬───────┘             │              │
+│        │                     ▼              │
+│        │           ┌──────────────────────┐ │
+│        │           │ Worker Thread        │ │
+│        │           │ (BullMQ Worker)      │ │
+│        │           └─────────┬────────────┘ │
+│        ▼                     ▼              │
+│  ┌───────────────────────────────────────┐ │
+│  │ Scraper Service                        │ │
+│  │ - Fetch (fast path)                    │ │
+│  │ - Cheerio (static)                     │ │
+│  │ - Playwright (dynamic)                 │ │
+│  └───────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+```
+
+## ADRs (Architecture Decision Records)
+
+### ADR-001: Runtime = Bun v1.1+
+- **Context**: Faster startup vs Node; built-in fetch and modern JS runtime.
+- **Decision**: Bun is the only supported runtime.
+- **Consequences**: Faster cold starts; must confirm Playwright compatibility in Bun.
+
+### ADR-002: HTTP Framework = Hono
+- **Context**: Hono is lightweight, standard-compliant, and simple for API services.
+- **Decision**: Use Hono for API routing and middleware.
+- **Consequences**: Minimal framework overhead; need explicit middlewares for auth, logging, and validation.
+
+### ADR-003: Static Scraping = Fetch + Cheerio
+- **Context**: Fast, low-memory static rendering required.
+- **Decision**: Use Bun’s native fetch; parse HTML with Cheerio.
+- **Consequences**: Comparable to Colly for static HTML; no JS execution.
+
+### ADR-004: Dynamic Scraping = Playwright
+- **Context**: Need full JS rendering for SPAs.
+- **Decision**: Use Playwright with Chromium contexts.
+- **Consequences**: Higher memory per context than chromedp tabs; must control concurrency.
+
+### ADR-005: Queue System = BullMQ + Redis
+- **Context**: Asynq equivalent for Node ecosystem with retries and job metadata.
+- **Decision**: BullMQ Worker for `/crawl`.
+- **Consequences**: Manage worker concurrency; consider sandboxed processors or worker threads for CPU-heavy tasks.
+
+### ADR-006: Markdown Conversion = @turndown/turndown
+- **Context**: HTML → Markdown with predictable output.
+- **Decision**: Use Turndown.
+- **Consequences**: Must validate output parity against Go’s html-to-markdown/v2.
+
+### ADR-007: Config Validation = Valibot
+- **Context**: Lightweight schema-based validation with minimal bundle size.
+- **Decision**: Valibot for env/config validation.
+- **Consequences**: Clear validation rules; must design a schema for all env vars.
+
+### ADR-008: Logging = Pino
+- **Context**: Structured logging similar to slog.
+- **Decision**: Use Pino for JSON logs.
+- **Consequences**: Low overhead; need consistent log fields across API and worker.
+
+### ADR-009: Monolith Deployment Pattern
+- **Context**: Leapcell pay-per-container favors single container strategy.
+- **Decision**: Run API + worker in one container using worker threads.
+- **Consequences**: Must implement explicit thread lifecycle management and shutdown hooks.
+
+## Feature Parity Matrix (Go vs JS)
+| Capability | Go (Current) | JS (Planned) | Gap/Notes |
+| --- | --- | --- | --- |
+| `/v1/scrape` | ✅ | ✅ | Parity expected |
+| `/v1/crawl` | ✅ | ✅ | BullMQ semantics differ from Asynq |
+| `/v1/search` | ✅ (Brave) | ⚠️ TBD | Not included in MVP |
+| Smart mode | ✅ | ✅ | Requires new heuristics doc |
+| Browser pooling | ✅ | ⚠️ Partial | Playwright contexts vs chromedp tabs |
+| Anti-detection | ✅ | ✅ | Via playwright-extra + stealth |
+| Redis TLS | ✅ | ✅ | Must ensure BullMQ ioredis TLS config |
+
+## Top Risks & Mitigations
+1. **Playwright memory cost**: Limit concurrency, recycle contexts, benchmark memory per context.
+2. **Bun + Playwright compatibility**: Validate integration in Phase 1/2 before full migration.
+3. **Worker thread lifecycle**: Implement controlled shutdown (drain queue, close contexts).
+
+## Cost Projection (Leapcell)
+- **Base target**: 4GB RAM container + managed Redis.
+- **Assumptions**: Single container, pay-per-compute-minute, low idle cost.
+- **Cost drivers**: dynamic scrape concurrency, Playwright startup times, Redis I/O.
+- **Action**: confirm pricing against Leapcell dashboard during Phase 0.
+
+## Go/No-Go Gate
+Proceed to build only if benchmarks show:
+- < 5s cold start
+- < 2GB memory at 10 concurrent dynamic scrapes
+- 1000+ jobs/hour via BullMQ on 4GB RAM
+

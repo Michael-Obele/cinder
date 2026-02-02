@@ -1,0 +1,32 @@
+# Leapcell service configuration (planning only)
+# NOTE: Validate schema with Leapcell docs before deployment.
+service:
+  name: cinder-js
+  runtime: bun
+  port: 8080
+
+build:
+  command: "bun install && npx -y playwright@1.50.1 install --with-deps chromium"
+
+start:
+  command: "bun run start"
+
+resources:
+  memory: 4Gi
+  cpu: 1
+
+health:
+  path: "/healthz"
+  intervalSeconds: 30
+  timeoutSeconds: 5
+  unhealthyThreshold: 3
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: REDIS_URL
+    value: "rediss://user:pass@host:port"
+  - name: WORKER_CONCURRENCY
+    value: "5"
+  - name: LOG_LEVEL
+    value: "info"
