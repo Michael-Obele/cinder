@@ -5,6 +5,8 @@ This folder contains **documentation-only** planning artifacts for the `cinder-j
 ## Primary Deliverables
 
 - [Architecture & ADRs](plan/cinder-js-architecture.md)
+- [Bun Runtime Notes](plan/bun-runtime-notes.md)
+- [Bun Framework Benchmarks (Hono vs Elysia)](plan/framework-benchmarks.md)
 - [Go vs JS Comparison](plan/go-vs-js-comparison.md)
 - [Implementation Roadmap](plan/implementation-roadmap.md)
 - [Smart Mode Heuristics](plan/smart-mode-heuristics.md)
@@ -24,7 +26,7 @@ This folder contains **documentation-only** planning artifacts for the `cinder-j
 ## Scope & Constraints
 
 - Runtime: **Bun v1.1+**
-- Framework: **Hono**
+- Framework: **Hono or Elysia (TBD via benchmarks)**
 - Static scraping: **Fetch + Cheerio**
 - Dynamic scraping: **Playwright**
 - Queue: **BullMQ + Redis**
