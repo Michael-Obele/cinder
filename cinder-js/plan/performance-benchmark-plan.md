@@ -2,7 +2,7 @@
 
 > **Purpose:** Define methodology for measuring and comparing Go vs JS performance  
 > **When:** Execute during Phase 2 of implementation  
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
 
 ---
 
@@ -49,7 +49,7 @@
 ```yaml
 # Pin versions for reproducibility
 go: 1.25.x
-bun: 1.1.x
+bun: 1.2.x (or latest)
 playwright: 1.50.x
 chromium: matching playwright
 redis: 7.x (Upstash)

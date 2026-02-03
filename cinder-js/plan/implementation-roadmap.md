@@ -2,7 +2,7 @@
 
 > **Status:** Planning Phase  
 > **Estimated Duration:** 4 weeks (10-15 working days)  
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
 
 ---
 
@@ -219,7 +219,8 @@ At the end of Phase 1, evaluate:
 - [ ] Update Dockerfile with Playwright:
   ```dockerfile
   FROM mcr.microsoft.com/playwright:v1.50.0-jammy
-  # Or leapcell/playwright-boilerplate
+  # Update to Bun 1.2+ for memory optimizations
+  RUN curl -fsSL https://bun.sh/install | bash
   ```
 - [ ] End-to-end testing with dynamic sites (React, Next.js)
 - [ ] Deploy to Leapcell staging
@@ -542,5 +543,5 @@ Week 1      Week 2      Week 3      Week 4
 
 ---
 
-*Document Version: 1.0.0-draft*  
-*Last Updated: 2026-02-02*
+*Document Version: 1.0.1*  
+*Last Updated: 2026-02-03*

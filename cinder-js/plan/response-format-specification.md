@@ -2,7 +2,7 @@
 
 > **Purpose:** Define the output formats and metadata structure for cinder-js scrape responses  
 > **Inspired by:** Firecrawl, Jina Reader, Crawlee  
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
 
 ---
 
@@ -699,5 +699,5 @@ function toLegacyFormat(response: ScrapeResponse): LegacyResponse {
 
 ---
 
-*Document Version: 1.0.0-draft*  
-*Last Updated: 2026-02-02*
+*Document Version: 1.0.1*  
+*Last Updated: 2026-02-03*

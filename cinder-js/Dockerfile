@@ -3,7 +3,7 @@
 # =============================================================================
 # Stage 1: Dependencies
 # =============================================================================
-FROM oven/bun:1.1-slim AS deps
+FROM oven/bun:1-slim AS deps
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN bun install --frozen-lockfile --production
 # =============================================================================
 # Stage 2: Builder (if bundling needed)
 # =============================================================================
-FROM oven/bun:1.1-slim AS builder
+FROM oven/bun:1-slim AS builder
 
 WORKDIR /app
 

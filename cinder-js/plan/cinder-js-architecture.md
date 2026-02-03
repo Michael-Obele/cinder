@@ -2,8 +2,8 @@
 
 > **RFC Status:** Draft  
 > **Author:** Technical Architecture Team  
-> **Created:** 2026-02-02  
-> **Target Decision Date:** TBD
+> **Last Updated:** 2026-02-03
+> **Revision:** Updated memory baselines (JSC vs V8) and performance data
 
 ---
 
@@ -45,8 +45,8 @@ Evaluate porting Cinder to a JavaScript/TypeScript stack:
 | Metric               | Go (Current) | JS (Projected) | Assessment            |
 | -------------------- | ------------ | -------------- | --------------------- |
 | Cold Start           | ~1-2s        | ~3-5s          | ⚠️ Regression expected |
-| Memory (idle)        | ~50MB        | ~80-120MB      | ⚠️ Higher baseline     |
-| Memory (10 contexts) | ~500MB       | ~800MB-1.2GB   | ⚠️ Key risk area       |
+| Memory (idle)        | ~50MB        | ~45-65MB       | ✅ Comparable baseline |
+| Memory (10 contexts) | ~500MB       | ~700MB         | ✅ Manageable          |
 | Dev Velocity         | Moderate     | High           | ✅ Improvement         |
 | Maintenance          | Moderate     | Lower          | ✅ Improvement         |
 | Ecosystem            | Go-specific  | NPM (vast)     | ✅ Larger ecosystem    |
@@ -269,7 +269,9 @@ Use **Hono** instead of Express or Fastify.
 1. **Web Standard Compliant:** Uses native Request/Response objects
 2. **Lightweight:** ~14KB minified (vs Express ~200KB)
 3. **Multi-Runtime:** Works on Bun, Node, Deno, Cloudflare Workers
-4. **Performance:** Benchmarks show 2-3x faster than Express
+4. **Stability:** More stable and predictable than Elysia (which had recent regressions)
+
+> **Note on Elysia:** While Elysia 1.4+ is faster (~300k req/s vs Hono's ~200k req/s), Hono was chosen for stability, portability, and wider team familiarity. The HTTP layer is not the bottleneck in this scraping application.
 
 **Consequences:**
 - Positive: Fast, small, portable
@@ -451,8 +453,9 @@ Use **Turndown** to replace html-to-markdown/v2.
 V8 (Bun) + Playwright may exceed Leapcell's 4GB limit under load.
 
 **Analysis:**
+**Analysis:**
 - Go baseline: ~200-300MB for browser + API
-- JS projected: ~400-600MB baseline, ~1.2-1.5GB at 10 contexts
+- JS projected: ~300MB baseline (JSC), ~700MB-1.0GB at 10 contexts
 - Leapcell limit: 4GB
 
 **Probability:** Medium (40%)
@@ -502,7 +505,7 @@ Node.js worker_threads pattern is more complex than Go goroutines.
 
 **Analysis:**
 - Go: Goroutines are lightweight (2KB stack)
-- JS: Worker threads are OS-level threads with V8 isolate overhead
+- JS: Worker threads are OS-level threads (Bun workers share JSC runtime, lighter than Node V8 isolates)
 - Challenge: Sharing browser instance across threads
 
 **Probability:** Low (30%)

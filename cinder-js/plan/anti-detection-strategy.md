@@ -2,7 +2,7 @@
 
 > **Purpose:** Document stealth scraping patterns and bot evasion techniques  
 > **Goal:** Match capabilities of Go's undetected-chromedp  
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
 
 ---
 
@@ -461,5 +461,5 @@ const context = await browser.newContext({
 
 ---
 
-*Document Version: 1.0.0-draft*  
-*Last Updated: 2026-02-02*
+*Document Version: 1.0.1*  
+*Last Updated: 2026-02-03*

@@ -2,7 +2,8 @@
 
 > **Status:** RFC / Planning Phase  
 > **Created:** 2026-02-02  
-> **Version:** 0.1.0-draft
+> **Version:** 0.1.1-draft
+> **Last Updated:** 2026-02-03 (Updated for Bun/JSC findings)
 
 ---
 
@@ -60,27 +61,27 @@ This documentation package evaluates the feasibility of porting **Cinder** (a Go
 
 ## Technology Stack Summary
 
-| Component           | Go (Current)        | JS (Proposed)              | Rationale                                  |
-| ------------------- | ------------------- | -------------------------- | ------------------------------------------ |
-| Runtime             | Go 1.25+            | **Bun 1.1+**               | Fast startup, native TS, unified toolchain |
-| Web Framework       | Gin                 | **Hono**                   | Lightweight, Web Standard compliant        |
-| Static Scraping     | Colly               | **Cheerio + native fetch** | Equivalent functionality, familiar API     |
-| Dynamic Scraping    | Chromedp            | **Playwright**             | Better DX, more features, stealth plugins  |
-| Queue System        | Asynq               | **BullMQ**                 | Redis-backed, mature ecosystem             |
-| Markdown Conversion | html-to-markdown/v2 | **Turndown**               | Standard, extensible                       |
-| Config Validation   | Viper               | **Valibot**                | Modular, tiny bundle (<700 bytes)          |
-| Logging             | slog                | **Pino**                   | Structured JSON, high performance          |
+| Component           | Go (Current)        | JS (Proposed)              | Rationale                                        |
+| ------------------- | ------------------- | -------------------------- | ------------------------------------------------ |
+| Runtime             | Go 1.25+            | **Bun 1.2+**               | Fast startup, JSC engine (low memory), native TS |
+| Web Framework       | Gin                 | **Hono**                   | Lightweight, Web Standard compliant              |
+| Static Scraping     | Colly               | **Cheerio + native fetch** | Equivalent functionality, familiar API           |
+| Dynamic Scraping    | Chromedp            | **Playwright**             | Better DX, more features, stealth plugins        |
+| Queue System        | Asynq               | **BullMQ**                 | Redis-backed, mature ecosystem                   |
+| Markdown Conversion | html-to-markdown/v2 | **Turndown**               | Standard, extensible                             |
+| Config Validation   | Viper               | **Valibot**                | Modular, tiny bundle (<700 bytes)                |
+| Logging             | slog                | **Pino**                   | Structured JSON, high performance                |
 
 ---
 
 ## Key Risks Summary
 
-| Risk                               | Severity | Mitigation                          | Status     |
-| ---------------------------------- | -------- | ----------------------------------- | ---------- |
-| Memory overhead of V8 + Playwright | 🔴 High   | Benchmark at 10 concurrent contexts | Pending    |
-| Cold start regression              | 🟡 Medium | Lazy browser init, keep-warm pings  | Documented |
-| BullMQ worker thread complexity    | 🟡 Medium | Reference pattern documented        | Documented |
-| Feature parity gaps                | 🟢 Low    | Full API mapping completed          | Documented |
+| Risk                                | Severity | Mitigation                          | Status     |
+| ----------------------------------- | -------- | ----------------------------------- | ---------- |
+| Memory overhead of Playwright (JSC) | 🟡 Medium | Benchmark at 10 concurrent contexts | Pending    |
+| Cold start regression               | 🟡 Medium | Lazy browser init, keep-warm pings  | Documented |
+| BullMQ worker thread complexity     | 🟡 Medium | Reference pattern documented        | Documented |
+| Feature parity gaps                 | 🟢 Low    | Full API mapping completed          | Documented |
 
 ---
 
@@ -104,4 +105,4 @@ This is a living document. To propose changes:
 
 ---
 
-*Last Updated: 2026-02-02*
+*Last Updated: 2026-02-03*

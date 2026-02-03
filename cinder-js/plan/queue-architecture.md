@@ -2,7 +2,8 @@
 
 > **Purpose:** Document the async job queue design using BullMQ  
 > **Replaces:** Go Asynq implementation  
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
+> **Revision:** Updated for Bun/JSC worker architecture
 
 ---
 
@@ -368,9 +369,10 @@ router.Run(":" + port)
 ```
 
 **JS Challenge:**
-- Node.js is single-threaded
-- BullMQ worker can block event loop
-- Need worker_threads or careful async design
+- Bun is single-threaded (event loop based)
+- BullMQ worker can block event loop during CPU-intensive tasks
+- Need **Bun Workers** (`new Worker()`) for true parallelism
+- **Bun workers** use standard Web Worker API but run in separate JSC instances sharing some resources
 
 ### Solution: Same-Thread Approach
 
@@ -408,39 +410,35 @@ async function main() {
 main().catch(console.error);
 ```
 
-### Alternative: Worker Thread Approach
+### Alternative: Worker Thread Approach (Bun)
 
 For CPU-heavy processing (not typical for scraping):
 
 ```typescript
 // main.ts
-import { Worker as NodeWorker } from 'worker_threads';
+// Bun uses Web Worker API
+const worker = new Worker(new URL("worker.ts", import.meta.url).href);
 
-async function main() {
-  // Start worker in separate thread
-  const workerThread = new NodeWorker('./worker-thread.js');
-  
-  workerThread.on('message', (msg) => {
-    console.log('Worker message:', msg);
-  });
-  
-  workerThread.on('error', (err) => {
-    console.error('Worker error:', err);
-  });
-  
-  // Start API server in main thread
-  const app = createApp();
-  Bun.serve({ port: 8080, fetch: app.fetch });
-}
+worker.onmessage = (event) => {
+  console.log("Worker message:", event.data);
+};
 
-// worker-thread.ts (separate file)
+// Start API server in main thread
+const app = createApp();
+Bun.serve({ port: 8080, fetch: app.fetch });
+
+// worker.ts
 import { Worker } from 'bullmq';
 
-const worker = new Worker('scrape', processor, options);
+// Bun workers are separate entry points
+const queueWorker = new Worker('scrape', processor, {
+    connection: redisOptions,
+    // ...
+});
 console.log('Worker thread started');
 ```
 
-**Recommendation:** Start with same-thread approach (simpler). Only move to worker threads if CPU becomes bottleneck.
+**Recommendation:** Start with same-thread approach (simpler). Only move to worker threads if CPU becomes bottleneck. Run BullMQ in main thread first.
 
 ---
 
@@ -670,5 +668,5 @@ const worker = new Worker('scrape', processor, { connection: workerConnection })
 
 ---
 
-*Document Version: 1.0.0-draft*  
-*Last Updated: 2026-02-02*
+*Document Version: 1.1.0*  
+*Last Updated: 2026-02-03*
