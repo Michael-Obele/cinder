@@ -8,6 +8,10 @@ import (
 	"github.com/standard-user/cinder/internal/api/handlers"
 	"github.com/standard-user/cinder/internal/api/middleware"
 	"github.com/standard-user/cinder/internal/config"
+
+	_ "github.com/standard-user/cinder/internal/api/docs"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler) *gin.Engine {
@@ -19,6 +23,9 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger(logger))
+
+	// Swagger Docs mapping
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/v1")
 	{

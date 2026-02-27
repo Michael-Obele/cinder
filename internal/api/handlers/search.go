@@ -37,9 +37,25 @@ func NewSearchHandler(s search.Service) *SearchHandler {
 	}
 }
 
+// Search godoc
+// @Summary      Search the web
+// @Description  Searches the web using the configured search provider (Brave Search) and returns a list of matching results.
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Param        query          query     string  false  "The search query"
+// @Param        q              query     string  false  "Alias for query"
+// @Param        offset         query     int     false  "Pagination offset"
+// @Param        limit          query     int     false  "Pagination limit (max 100)"
+// @Param        body           body      SearchRequest  false  "JSON request body"
+// @Success      200    {object}  SearchResponse
+// @Failure      400    {object}  map[string]interface{}
+// @Failure      500    {object}  map[string]interface{}
+// @Router       /search [post]
+// @Router       /search [get]
 func (h *SearchHandler) Search(c *gin.Context) {
 	var req SearchRequest
-	
+
 	// Try to bind from JSON first (POST)
 	if c.Request.Method == http.MethodPost && c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,7 +70,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	} else if q := c.Query("q"); q != "" { // Support 'q' as common alias
 		req.Query = q
 	}
-	
+
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if offset, err := strconv.Atoi(offsetStr); err == nil {
 			req.Offset = offset

@@ -1,0 +1,399 @@
+basePath: /v1
+definitions:
+  domain.ImageData:
+    properties:
+      alt:
+        type: string
+      blob:
+        type: string
+      format:
+        type: string
+      height:
+        type: integer
+      size_bytes:
+        type: integer
+      source:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  domain.ScrapeResult:
+    properties:
+      html:
+        type: string
+      images:
+        items:
+          $ref: '#/definitions/domain.ImageData'
+        type: array
+      markdown:
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      screenshot:
+        allOf:
+        - $ref: '#/definitions/domain.ScreenshotData'
+        description: Image fields (omitted when not requested)
+      url:
+        type: string
+    type: object
+  domain.ScreenshotData:
+    properties:
+      blob:
+        type: string
+      captured_at:
+        type: string
+      format:
+        type: string
+      full_page:
+        type: boolean
+      height:
+        type: integer
+      size_bytes:
+        type: integer
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  handlers.CrawlRequest:
+    properties:
+      render:
+        type: boolean
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  handlers.CrawlResponse:
+    properties:
+      id:
+        type: string
+      render:
+        type: boolean
+      url:
+        type: string
+    type: object
+  handlers.ScrapeRequest:
+    properties:
+      mode:
+        description: '"smart", "static", "dynamic"'
+        type: string
+      render:
+        description: 'Deprecated: usage ignores Mode if true'
+        type: boolean
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  handlers.SearchRequest:
+    properties:
+      excludeDomains:
+        items:
+          type: string
+        type: array
+      includeDomains:
+        items:
+          type: string
+        type: array
+      limit:
+        type: integer
+      maxAge:
+        type: integer
+      mode:
+        type: string
+      offset:
+        type: integer
+      query:
+        type: string
+      requiredText:
+        items:
+          type: string
+        type: array
+    required:
+    - query
+    type: object
+  handlers.SearchResponse:
+    properties:
+      count:
+        type: integer
+      hasMore:
+        type: boolean
+      nextOffset:
+        type: integer
+      query:
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/search.Result'
+        type: array
+    type: object
+  search.Result:
+    properties:
+      description:
+        type: string
+      domain:
+        type: string
+      id:
+        type: string
+      relevance:
+        type: number
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Web scraping, crawling, and AI data extraction API.
+  title: Cinder API
+  version: "1.0"
+paths:
+  /crawl:
+    post:
+      consumes:
+      - application/json
+      description: Submits a URL to be crawled asynchronously using the background
+        worker queue. Requires Redis.
+      parameters:
+      - description: JSON request body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CrawlRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/handlers.CrawlResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Enqueue a URL for asynchronous crawling
+      tags:
+      - crawl
+  /crawl/{id}:
+    get:
+      description: Retrieves the current status and result of a previously enqueued
+        crawl task by its ID.
+      parameters:
+      - description: The crawl task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The task status and result payload
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Task not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get the status of an asynchronous crawl
+      tags:
+      - crawl
+  /scrape:
+    get:
+      consumes:
+      - application/json
+      description: Scrapes a given URL and returns its markdown content, metadata,
+        and optionally captures a screenshot or extracts images if enabled.
+      parameters:
+      - description: The URL to scrape
+        in: query
+        name: url
+        type: string
+      - description: 'Scraping mode: smart, static, dynamic'
+        in: query
+        name: mode
+        type: string
+      - description: 'Deprecated: use mode=dynamic instead'
+        in: query
+        name: render
+        type: boolean
+      - description: JSON request body (alternative to query params)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.ScrapeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ScrapeResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Scrape a webpage
+      tags:
+      - scrape
+    post:
+      consumes:
+      - application/json
+      description: Scrapes a given URL and returns its markdown content, metadata,
+        and optionally captures a screenshot or extracts images if enabled.
+      parameters:
+      - description: The URL to scrape
+        in: query
+        name: url
+        type: string
+      - description: 'Scraping mode: smart, static, dynamic'
+        in: query
+        name: mode
+        type: string
+      - description: 'Deprecated: use mode=dynamic instead'
+        in: query
+        name: render
+        type: boolean
+      - description: JSON request body (alternative to query params)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.ScrapeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ScrapeResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Scrape a webpage
+      tags:
+      - scrape
+  /search:
+    get:
+      consumes:
+      - application/json
+      description: Searches the web using the configured search provider (Brave Search)
+        and returns a list of matching results.
+      parameters:
+      - description: The search query
+        in: query
+        name: query
+        type: string
+      - description: Alias for query
+        in: query
+        name: q
+        type: string
+      - description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      - description: Pagination limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: JSON request body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search the web
+      tags:
+      - search
+    post:
+      consumes:
+      - application/json
+      description: Searches the web using the configured search provider (Brave Search)
+        and returns a list of matching results.
+      parameters:
+      - description: The search query
+        in: query
+        name: query
+        type: string
+      - description: Alias for query
+        in: query
+        name: q
+        type: string
+      - description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      - description: Pagination limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: JSON request body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search the web
+      tags:
+      - search
+swagger: "2.0"

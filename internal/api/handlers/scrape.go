@@ -22,9 +22,24 @@ func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
 	return &ScrapeHandler{service: s}
 }
 
+// Scrape godoc
+// @Summary      Scrape a webpage
+// @Description  Scrapes a given URL and returns its markdown content, metadata, and optionally captures a screenshot or extracts images if enabled.
+// @Tags         scrape
+// @Accept       json
+// @Produce      json
+// @Param        url    query     string  false  "The URL to scrape"
+// @Param        mode   query     string  false  "Scraping mode: smart, static, dynamic"
+// @Param        render query     bool    false  "Deprecated: use mode=dynamic instead"
+// @Param        body   body      ScrapeRequest  false  "JSON request body (alternative to query params)"
+// @Success      200    {object}  domain.ScrapeResult
+// @Failure      400    {object}  map[string]interface{}
+// @Failure      500    {object}  map[string]interface{}
+// @Router       /scrape [post]
+// @Router       /scrape [get]
 func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	var req ScrapeRequest
-	
+
 	// Try to bind from JSON first (POST)
 	if c.Request.Method == http.MethodPost && c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {

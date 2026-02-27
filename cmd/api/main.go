@@ -1,5 +1,9 @@
 package main
 
+// @title           Cinder API
+// @version         1.0
+// @description     Web scraping, crawling, and AI data extraction API.
+// @BasePath        /v1
 import (
 	"fmt"
 	"os"

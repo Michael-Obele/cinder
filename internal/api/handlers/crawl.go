@@ -61,6 +61,17 @@ func (h *CrawlHandler) Close() {
 	h.inspector.Close()
 }
 
+// EnqueueCrawl godoc
+// @Summary      Enqueue a URL for asynchronous crawling
+// @Description  Submits a URL to be crawled asynchronously using the background worker queue. Requires Redis.
+// @Tags         crawl
+// @Accept       json
+// @Produce      json
+// @Param        body   body      CrawlRequest   true  "JSON request body"
+// @Success      202    {object}  CrawlResponse
+// @Failure      400    {object}  map[string]interface{}
+// @Failure      500    {object}  map[string]interface{}
+// @Router       /crawl [post]
 func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 	var req CrawlRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -87,6 +98,15 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 	})
 }
 
+// GetCrawlStatus godoc
+// @Summary      Get the status of an asynchronous crawl
+// @Description  Retrieves the current status and result of a previously enqueued crawl task by its ID.
+// @Tags         crawl
+// @Produce      json
+// @Param        id     path      string  true  "The crawl task ID"
+// @Success      200    {object}  map[string]interface{} "The task status and result payload"
+// @Failure      404    {object}  map[string]interface{} "Task not found"
+// @Router       /crawl/{id} [get]
 func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 	id := c.Param("id")
 	info, err := h.inspector.GetTaskInfo("default", id) // Assuming default queue for simple lookup, but we might need to search all queues
