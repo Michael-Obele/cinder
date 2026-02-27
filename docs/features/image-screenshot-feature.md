@@ -1,26 +1,21 @@
-# Image and Screenshot Feature Implementation Plan
+# Image and Screenshot Feature Implementation
 
 **Document Location:** `docs/features/image-screenshot-feature.md`
 **Related:** [Image Blob Transport](./image-blob-transport.md) | [Documentation Index](../guides/INDEX.md)
+**Status:** ✅ **Implemented**
 
 ---
 
 ## Overview
 
-This document outlines a comprehensive plan to add image and screenshot capture capabilities to the Cinder services. The feature will allow users to retrieve images and capture screenshots primarily from **scraped websites**, enhancing the data extraction capabilities, while also supporting search result enrichment.
+This document outlines the implementation of image and screenshot capture capabilities in Cinder. Users can now toggle `screenshot` and `images` flags in both the **Synchronous Scrape API** and **Asynchronous Crawl API**.
 
-### Current State
+### Current Implementation
 
-- **Search Service** (`internal/search`): Returns text-based results from Brave Search.
-- **Scrape Service** (`internal/scraper`): Fetches HTML/Markdown using Colly or Chromedp. Returns `domain.ScrapeResult`.
-
-### Goal
-
-Extend the **Scrape Service** (and optionally Search Service) to:
-
-1.  Capture full-page or viewport screenshots of the scraped URL.
-2.  Extract main images from the scraped content.
-3.  Return these assets in a structured format.
+- **API Handlers** (`internal/api/handlers`): `scrape` and `crawl` endpoints support `screenshot` and `images` parameters.
+- **Scrape Service** (`internal/scraper`): Passes options down to the underlying engine.
+- **Chromedp Engine** (`internal/scraper/chromedp.go`): Captures full-page screenshots as base64-encoded JPEGs.
+- **Asynq Worker** (`internal/worker`): Propagates flags through the background task system.
 
 ---
 
