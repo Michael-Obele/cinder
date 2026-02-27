@@ -19,7 +19,7 @@ func NewCollyScraper() *CollyScraper {
 	return &CollyScraper{}
 }
 
-func (s *CollyScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
+func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	c := colly.NewCollector(
 		colly.Async(true),
 	)

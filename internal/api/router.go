@@ -9,9 +9,9 @@ import (
 	"github.com/standard-user/cinder/internal/api/middleware"
 	"github.com/standard-user/cinder/internal/config"
 
-	_ "github.com/standard-user/cinder/internal/api/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/swaggo/swag"
 )
 
 func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler) *gin.Engine {
@@ -25,7 +25,22 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	r.Use(middleware.Logger(logger))
 
 	// Swagger Docs mapping
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	if cfg.Server.Mode == "debug" {
+		// Register a dummy doc so ginSwagger doesn't 404
+		swag.Register(swag.Name, &swag.Spec{
+			InfoInstanceName: "swagger",
+			SwaggerTemplate:  `{"swagger":"2.0", "info":{"title":"Swagger UI", "version":"1.0"}}`,
+		})
+		r.GET("/swagger-docs/swagger.json", func(c *gin.Context) {
+			c.File("./internal/api/docs/swagger.json")
+		})
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger-docs/swagger.json")))
+	} else {
+		// Optionally, you might want to disable swagger entirely in release
+		r.GET("/swagger/*any", func(c *gin.Context) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Swagger available only in debug mode"})
+		})
+	}
 
 	v1 := r.Group("/v1")
 	{

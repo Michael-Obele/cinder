@@ -25,7 +25,7 @@ func (m *MockSearchService) Search(ctx context.Context, opts search.SearchOption
 	if m.err != nil {
 		return nil, 0, m.err
 	}
-	
+
 	// Return only the requested slice based on offset
 	start := opts.Offset
 	end := opts.Offset + opts.Limit
@@ -35,7 +35,7 @@ func (m *MockSearchService) Search(ctx context.Context, opts search.SearchOption
 	if start > len(m.results) {
 		start = len(m.results)
 	}
-	
+
 	return m.results[start:end], m.total, nil
 }
 
@@ -43,10 +43,10 @@ func (m *MockSearchService) Search(ctx context.Context, opts search.SearchOption
 func setupTestServer(service search.Service) *httptest.Server {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	
+
 	searchHandler := handlers.NewSearchHandler(service)
 	router.POST("/v1/search", searchHandler.Search)
-	
+
 	return httptest.NewServer(router)
 }
 
@@ -64,77 +64,77 @@ func TestIntegrationSearchPagination(t *testing.T) {
 			Relevance:   1.0 - float64(i%10)*0.1,
 		})
 	}
-	
+
 	mockService := &MockSearchService{
 		results: results,
 		total:   100,
 	}
-	
+
 	server := setupTestServer(mockService)
 	defer server.Close()
-	
+
 	// Test paginating through all results
 	var allResults []search.Result
 	offset := 0
 	limit := 10
 	pageNum := 0
-	
+
 	for {
 		pageNum++
-		
+
 		// Make request
 		reqBody := map[string]interface{}{
 			"query":  "test",
 			"offset": offset,
 			"limit":  limit,
 		}
-		
+
 		body, _ := json.Marshal(reqBody)
 		resp, err := http.Post(
 			server.URL+"/v1/search",
 			"application/json",
 			bytes.NewReader(body),
 		)
-		
+
 		if err != nil {
 			t.Fatalf("Page %d: Request failed: %v", pageNum, err)
 		}
-		
+
 		var searchResp handlers.SearchResponse
 		if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 			t.Fatalf("Page %d: Failed to decode response: %v", pageNum, err)
 		}
 		resp.Body.Close()
-		
+
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("Page %d: Expected status 200, got %d", pageNum, resp.StatusCode)
 		}
-		
-		t.Logf("Page %d: Got %d results, hasMore=%v, nextOffset=%d", 
+
+		t.Logf("Page %d: Got %d results, hasMore=%v, nextOffset=%d",
 			pageNum, searchResp.Count, searchResp.HasMore, searchResp.NextOffset)
-		
+
 		// Verify response
 		if searchResp.Count == 0 && searchResp.HasMore {
 			t.Errorf("Page %d: Got 0 results but hasMore=true", pageNum)
 		}
-		
+
 		if searchResp.Count > limit {
 			t.Errorf("Page %d: Got %d results, expected max %d", pageNum, searchResp.Count, limit)
 		}
-		
+
 		allResults = append(allResults, searchResp.Results...)
-		
+
 		if !searchResp.HasMore {
 			break
 		}
-		
+
 		offset = searchResp.NextOffset
-		
+
 		if pageNum > 20 {
 			t.Fatal("Too many pages, stopping to prevent infinite loop")
 		}
 	}
-	
+
 	if len(allResults) != 100 {
 		t.Errorf("Expected 100 total results, got %d", len(allResults))
 	}
@@ -149,7 +149,7 @@ func TestIntegrationDifferentQueries(t *testing.T) {
 		"python data science",
 		"kubernetes docker",
 	}
-	
+
 	for _, query := range queries {
 		t.Run(fmt.Sprintf("Query:%s", query), func(t *testing.T) {
 			// Create mock results specific to query
@@ -165,43 +165,43 @@ func TestIntegrationDifferentQueries(t *testing.T) {
 					Relevance:   1.0 - float64(i%5)*0.2,
 				})
 			}
-			
+
 			mockService := &MockSearchService{
 				results: results,
 				total:   numResults,
 			}
-			
+
 			server := setupTestServer(mockService)
 			defer server.Close()
-			
+
 			// First page
 			reqBody := map[string]interface{}{
 				"query":  query,
 				"offset": 0,
 				"limit":  10,
 			}
-			
+
 			body, _ := json.Marshal(reqBody)
 			resp, err := http.Post(
 				server.URL+"/v1/search",
 				"application/json",
 				bytes.NewReader(body),
 			)
-			
+
 			if err != nil {
 				t.Fatalf("Request failed: %v", err)
 			}
-			
+
 			var searchResp handlers.SearchResponse
 			if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 			resp.Body.Close()
-			
+
 			if searchResp.Query != query {
 				t.Errorf("Query mismatch: expected %q, got %q", query, searchResp.Query)
 			}
-			
+
 			if searchResp.Count == 0 {
 				t.Errorf("Expected results for query %q", query)
 			}
@@ -222,55 +222,55 @@ func TestIntegrationResponseStructure(t *testing.T) {
 			Relevance:   0.95,
 		})
 	}
-	
+
 	mockService := &MockSearchService{
 		results: results,
 		total:   30,
 	}
-	
+
 	server := setupTestServer(mockService)
 	defer server.Close()
-	
+
 	reqBody := map[string]interface{}{
 		"query":  "test",
 		"offset": 0,
 		"limit":  10,
 	}
-	
+
 	body, _ := json.Marshal(reqBody)
 	resp, err := http.Post(
 		server.URL+"/v1/search",
 		"application/json",
 		bytes.NewReader(body),
 	)
-	
+
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	
+
 	var searchResp handlers.SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 	resp.Body.Close()
-	
+
 	// Check all required fields
 	if searchResp.Query == "" {
 		t.Error("Query field is empty")
 	}
-	
+
 	if searchResp.Count == 0 {
 		t.Error("Count field is 0")
 	}
-	
+
 	if len(searchResp.Results) == 0 {
 		t.Error("Results array is empty")
 	}
-	
+
 	if searchResp.NextOffset == 0 && searchResp.HasMore {
 		t.Error("NextOffset is 0 but HasMore is true")
 	}
-	
+
 	// Check result structure
 	for i, result := range searchResp.Results {
 		if result.Title == "" {
@@ -301,15 +301,15 @@ func TestIntegrationLimitCapping(t *testing.T) {
 			Relevance:   1.0,
 		})
 	}
-	
+
 	mockService := &MockSearchService{
 		results: results,
 		total:   200,
 	}
-	
+
 	server := setupTestServer(mockService)
 	defer server.Close()
-	
+
 	tests := []struct {
 		requestLimit int
 		expectMax    int
@@ -320,7 +320,7 @@ func TestIntegrationLimitCapping(t *testing.T) {
 		{150, 100},
 		{200, 100},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("RequestLimit:%d", tt.requestLimit), func(t *testing.T) {
 			reqBody := map[string]interface{}{
@@ -328,24 +328,24 @@ func TestIntegrationLimitCapping(t *testing.T) {
 				"offset": 0,
 				"limit":  tt.requestLimit,
 			}
-			
+
 			body, _ := json.Marshal(reqBody)
 			resp, err := http.Post(
 				server.URL+"/v1/search",
 				"application/json",
 				bytes.NewReader(body),
 			)
-			
+
 			if err != nil {
 				t.Fatalf("Request failed: %v", err)
 			}
-			
+
 			var searchResp handlers.SearchResponse
 			if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 			resp.Body.Close()
-			
+
 			if searchResp.Count > tt.expectMax {
 				t.Errorf("Expected max %d results, got %d", tt.expectMax, searchResp.Count)
 			}
@@ -362,15 +362,15 @@ func TestIntegrationOffsetCalculation(t *testing.T) {
 			URL:   fmt.Sprintf("https://example.com/%d", i),
 		})
 	}
-	
+
 	mockService := &MockSearchService{
 		results: results,
 		total:   100,
 	}
-	
+
 	server := setupTestServer(mockService)
 	defer server.Close()
-	
+
 	tests := []struct {
 		offset        int
 		limit         int
@@ -385,7 +385,7 @@ func TestIntegrationOffsetCalculation(t *testing.T) {
 		{95, 5, false, 100},
 		{100, 10, false, 110},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("Offset:%d/Limit:%d", tt.offset, tt.limit), func(t *testing.T) {
 			reqBody := map[string]interface{}{
@@ -393,28 +393,28 @@ func TestIntegrationOffsetCalculation(t *testing.T) {
 				"offset": tt.offset,
 				"limit":  tt.limit,
 			}
-			
+
 			body, _ := json.Marshal(reqBody)
 			resp, err := http.Post(
 				server.URL+"/v1/search",
 				"application/json",
 				bytes.NewReader(body),
 			)
-			
+
 			if err != nil {
 				t.Fatalf("Request failed: %v", err)
 			}
-			
+
 			var searchResp handlers.SearchResponse
 			if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 			resp.Body.Close()
-			
+
 			if searchResp.HasMore != tt.expectHasMore {
 				t.Errorf("Expected hasMore=%v, got %v", tt.expectHasMore, searchResp.HasMore)
 			}
-			
+
 			if searchResp.NextOffset != tt.expectNext {
 				t.Errorf("Expected nextOffset=%d, got %d", tt.expectNext, searchResp.NextOffset)
 			}

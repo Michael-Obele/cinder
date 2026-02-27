@@ -63,7 +63,11 @@ definitions:
     type: object
   handlers.CrawlRequest:
     properties:
+      images:
+        type: boolean
       render:
+        type: boolean
+      screenshot:
         type: boolean
       url:
         type: string
@@ -74,18 +78,26 @@ definitions:
     properties:
       id:
         type: string
+      images:
+        type: boolean
       render:
+        type: boolean
+      screenshot:
         type: boolean
       url:
         type: string
     type: object
   handlers.ScrapeRequest:
     properties:
+      images:
+        type: boolean
       mode:
         description: '"smart", "static", "dynamic"'
         type: string
       render:
         description: 'Deprecated: usage ignores Mode if true'
+        type: boolean
+      screenshot:
         type: boolean
       url:
         type: string
@@ -233,6 +245,14 @@ paths:
         in: query
         name: render
         type: boolean
+      - description: Capture full-page screenshot (requires mode=dynamic or smart)
+        in: query
+        name: screenshot
+        type: boolean
+      - description: Extract images as base64 blobs
+        in: query
+        name: images
+        type: boolean
       - description: JSON request body (alternative to query params)
         in: body
         name: body
@@ -275,6 +295,14 @@ paths:
       - description: 'Deprecated: use mode=dynamic instead'
         in: query
         name: render
+        type: boolean
+      - description: Capture full-page screenshot (requires mode=dynamic or smart)
+        in: query
+        name: screenshot
+        type: boolean
+      - description: Extract images as base64 blobs
+        in: query
+        name: images
         type: boolean
       - description: JSON request body (alternative to query params)
         in: body

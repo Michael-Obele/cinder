@@ -53,14 +53,3 @@ const (
 	ImageFormatURL  ImageTransportFormat = "url"
 	ImageFormatBlob ImageTransportFormat = "blob"
 )
-
-// ScrapeOptions extends scraping with image capabilities.
-type ScrapeOptions struct {
-	Mode           string
-	Screenshot     bool
-	ExtractImages  bool
-	ImageFormat    ImageTransportFormat
-	ScreenshotOpts *ScreenshotOptions
-	MaxImages      int
-	MaxImageSizeKB int
-}

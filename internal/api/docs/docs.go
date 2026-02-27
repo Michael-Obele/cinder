@@ -133,6 +133,18 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Capture full-page screenshot (requires mode=dynamic or smart)",
+                        "name": "screenshot",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Extract images as base64 blobs",
+                        "name": "images",
+                        "in": "query"
+                    },
+                    {
                         "description": "JSON request body (alternative to query params)",
                         "name": "body",
                         "in": "body",
@@ -193,6 +205,18 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Deprecated: use mode=dynamic instead",
                         "name": "render",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Capture full-page screenshot (requires mode=dynamic or smart)",
+                        "name": "screenshot",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Extract images as base64 blobs",
+                        "name": "images",
                         "in": "query"
                     },
                     {
@@ -471,7 +495,13 @@ const docTemplate = `{
                 "url"
             ],
             "properties": {
+                "images": {
+                    "type": "boolean"
+                },
                 "render": {
+                    "type": "boolean"
+                },
+                "screenshot": {
                     "type": "boolean"
                 },
                 "url": {
@@ -485,7 +515,13 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "images": {
+                    "type": "boolean"
+                },
                 "render": {
+                    "type": "boolean"
+                },
+                "screenshot": {
                     "type": "boolean"
                 },
                 "url": {
@@ -499,12 +535,18 @@ const docTemplate = `{
                 "url"
             ],
             "properties": {
+                "images": {
+                    "type": "boolean"
+                },
                 "mode": {
                     "description": "\"smart\", \"static\", \"dynamic\"",
                     "type": "string"
                 },
                 "render": {
                     "description": "Deprecated: usage ignores Mode if true",
+                    "type": "boolean"
+                },
+                "screenshot": {
                     "type": "boolean"
                 },
                 "url": {

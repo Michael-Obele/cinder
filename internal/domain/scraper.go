@@ -13,6 +13,16 @@ type ScrapeResult struct {
 	Images     []ImageData     `json:"images,omitempty"`
 }
 
+type ScrapeOptions struct {
+	Mode           string               `json:"mode,omitempty"`
+	Screenshot     bool                 `json:"screenshot"`
+	Images         bool                 `json:"images"`
+	ImageFormat    ImageTransportFormat `json:"image_format,omitempty"`
+	ScreenshotOpts *ScreenshotOptions   `json:"screenshot_opts,omitempty"`
+	MaxImages      int                  `json:"max_images,omitempty"`
+	MaxImageSizeKB int                  `json:"max_image_size_kb,omitempty"`
+}
+
 type Scraper interface {
-	Scrape(ctx context.Context, url string) (*ScrapeResult, error)
+	Scrape(ctx context.Context, url string, opts ScrapeOptions) (*ScrapeResult, error)
 }

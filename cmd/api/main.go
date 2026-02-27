@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/standard-user/cinder/internal/api"
 	"github.com/standard-user/cinder/internal/api/handlers"
@@ -31,6 +32,19 @@ func main() {
 	// 2. Init Logger
 	logger.Init(cfg.App.LogLevel)
 	logger.Log.Info("Starting Cinder API", "port", cfg.Server.Port, "mode", cfg.Server.Mode)
+
+	// Auto-generate Swagger Docs in debug mode
+	if cfg.Server.Mode == "debug" {
+		logger.Log.Info("Auto-generating Swagger docs...")
+		cmd := exec.Command("go", "run", "github.com/swaggo/swag/cmd/swag@latest", "init", "-d", "./cmd/api,./internal/api/handlers,./internal/domain", "-g", "main.go", "-o", "internal/api/docs", "--parseDependency", "--parseInternal")
+		// Assuming we're running from the root of the project
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			logger.Log.Error("Failed to auto-generate swagger docs", "error", err, "output", string(output))
+		} else {
+			logger.Log.Info("Swagger docs auto-generated successfully")
+		}
+	}
 
 	// 3. Init Scraper
 	var redisClient *redis.Client

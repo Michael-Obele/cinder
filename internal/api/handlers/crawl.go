@@ -12,14 +12,18 @@ import (
 )
 
 type CrawlRequest struct {
-	URL    string `json:"url" binding:"required,url"`
-	Render bool   `json:"render"`
+	URL        string `json:"url" binding:"required,url"`
+	Render     bool   `json:"render"`
+	Screenshot bool   `json:"screenshot"`
+	Images     bool   `json:"images"`
 }
 
 type CrawlResponse struct {
-	ID     string `json:"id"`
-	URL    string `json:"url"`
-	Render bool   `json:"render"`
+	ID         string `json:"id"`
+	URL        string `json:"url"`
+	Render     bool   `json:"render"`
+	Screenshot bool   `json:"screenshot"`
+	Images     bool   `json:"images"`
 }
 
 type CrawlHandler struct {
@@ -79,7 +83,7 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 		return
 	}
 
-	task, err := worker.NewScrapeTask(req.URL, req.Render)
+	task, err := worker.NewScrapeTask(req.URL, req.Render, req.Screenshot, req.Images)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
@@ -92,9 +96,11 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, CrawlResponse{
-		ID:     info.ID,
-		URL:    req.URL,
-		Render: req.Render,
+		ID:         info.ID,
+		URL:        req.URL,
+		Render:     req.Render,
+		Screenshot: req.Screenshot,
+		Images:     req.Images,
 	})
 }
 

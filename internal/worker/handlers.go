@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/hibiken/asynq"
+	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/scraper"
 )
 
@@ -28,7 +29,7 @@ func (h *ScrapeTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		return fmt.Errorf("failed to unmarshal payload: %w, task_id=%s", err, t.ResultWriter().TaskID())
 	}
 
-	h.logger.Info("Processing scrape task", "url", payload.URL, "render", payload.Render, "mode", payload.Mode, "task_id", t.ResultWriter().TaskID())
+	h.logger.Info("Processing scrape task", "url", payload.URL, "render", payload.Render, "mode", payload.Mode, "screenshot", payload.Screenshot, "images", payload.Images, "task_id", t.ResultWriter().TaskID())
 
 	// Backward compatibility mapping
 	mode := payload.Mode
@@ -39,7 +40,10 @@ func (h *ScrapeTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		mode = "smart"
 	}
 
-	result, err := h.scraper.Scrape(ctx, payload.URL, mode)
+	result, err := h.scraper.Scrape(ctx, payload.URL, mode, domain.ScrapeOptions{
+		Screenshot: payload.Screenshot,
+		Images:     payload.Images,
+	})
 	if err != nil {
 		h.logger.Error("Scraping failed", "error", err, "url", payload.URL, "task_id", t.ResultWriter().TaskID())
 		return fmt.Errorf("scraping failed: %w", err)

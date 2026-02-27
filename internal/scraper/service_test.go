@@ -15,7 +15,7 @@ type mockScraper struct {
 	err    error
 }
 
-func (m *mockScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
+func (m *mockScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -50,7 +50,7 @@ func TestService_ScrapeStatic(t *testing.T) {
 
 	svc := NewService(colly, chromedp, nil)
 
-	result, err := svc.Scrape(context.Background(), "https://example.com", "static")
+	result, err := svc.Scrape(context.Background(), "https://example.com", "static", domain.ScrapeOptions{})
 	if err != nil {
 		t.Fatalf("Static scrape failed: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestService_ScrapeDynamic(t *testing.T) {
 
 	svc := NewService(colly, chromedp, nil)
 
-	result, err := svc.Scrape(context.Background(), "https://example.com", "dynamic")
+	result, err := svc.Scrape(context.Background(), "https://example.com", "dynamic", domain.ScrapeOptions{})
 	if err != nil {
 		t.Fatalf("Dynamic scrape failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestService_ScrapeSmart_UsesStaticFirst(t *testing.T) {
 
 	svc := NewService(colly, chromedp, nil)
 
-	result, err := svc.Scrape(context.Background(), "https://example.com", "smart")
+	result, err := svc.Scrape(context.Background(), "https://example.com", "smart", domain.ScrapeOptions{})
 	if err != nil {
 		t.Fatalf("Smart scrape failed: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestService_ScrapeSmart_FallsToDynamic(t *testing.T) {
 
 	svc := NewService(colly, chromedp, nil)
 
-	result, err := svc.Scrape(context.Background(), "https://spa.example.com", "smart")
+	result, err := svc.Scrape(context.Background(), "https://spa.example.com", "smart", domain.ScrapeOptions{})
 	if err != nil {
 		t.Fatalf("Smart scrape failed: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestService_ScrapeSmart_FallsToDynamic(t *testing.T) {
 func TestService_ScrapeUnknownMode(t *testing.T) {
 	svc := NewService(nil, nil, nil)
 
-	_, err := svc.Scrape(context.Background(), "https://example.com", "invalid")
+	_, err := svc.Scrape(context.Background(), "https://example.com", "invalid", domain.ScrapeOptions{})
 	if err == nil {
 		t.Error("Expected error for unknown mode")
 	}
@@ -132,7 +132,7 @@ func TestService_ScrapeDefaultMode(t *testing.T) {
 	svc := NewService(colly, chromedp, nil)
 
 	// Empty mode should default to "smart"
-	result, err := svc.Scrape(context.Background(), "https://example.com", "")
+	result, err := svc.Scrape(context.Background(), "https://example.com", "", domain.ScrapeOptions{})
 	if err != nil {
 		t.Fatalf("Default mode scrape failed: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestService_ScrapeDefaultMode(t *testing.T) {
 func TestService_ScrapeStaticNotConfigured(t *testing.T) {
 	svc := NewService(nil, nil, nil)
 
-	_, err := svc.Scrape(context.Background(), "https://example.com", "static")
+	_, err := svc.Scrape(context.Background(), "https://example.com", "static", domain.ScrapeOptions{})
 	if err == nil {
 		t.Error("Expected error when static scraper is not configured")
 	}
@@ -154,7 +154,7 @@ func TestService_ScrapeStaticNotConfigured(t *testing.T) {
 func TestService_ScrapeDynamicNotConfigured(t *testing.T) {
 	svc := NewService(nil, nil, nil)
 
-	_, err := svc.Scrape(context.Background(), "https://example.com", "dynamic")
+	_, err := svc.Scrape(context.Background(), "https://example.com", "dynamic", domain.ScrapeOptions{})
 	if err == nil {
 		t.Error("Expected error when dynamic scraper is not configured")
 	}
@@ -165,7 +165,7 @@ func TestService_ScrapeStaticError(t *testing.T) {
 
 	svc := NewService(colly, nil, nil)
 
-	_, err := svc.Scrape(context.Background(), "https://example.com", "static")
+	_, err := svc.Scrape(context.Background(), "https://example.com", "static", domain.ScrapeOptions{})
 	if err == nil {
 		t.Error("Expected error from failed static scrape")
 	}
@@ -176,7 +176,7 @@ func TestService_ScrapeDynamicError(t *testing.T) {
 
 	svc := NewService(nil, chromedp, nil)
 
-	_, err := svc.Scrape(context.Background(), "https://example.com", "dynamic")
+	_, err := svc.Scrape(context.Background(), "https://example.com", "dynamic", domain.ScrapeOptions{})
 	if err == nil {
 		t.Error("Expected error from failed dynamic scrape")
 	}

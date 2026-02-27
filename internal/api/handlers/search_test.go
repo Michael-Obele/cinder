@@ -86,12 +86,12 @@ func TestSearchHandlerPagination(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name           string
-		offset         int
-		limit          int
-		totalCount     int
-		expectHasMore  bool
-		expectNextOff  int
+		name          string
+		offset        int
+		limit         int
+		totalCount    int
+		expectHasMore bool
+		expectNextOff int
 	}{
 		{
 			name:          "First page with more",

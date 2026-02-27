@@ -13,16 +13,20 @@ const (
 )
 
 type ScrapePayload struct {
-	URL    string `json:"url"`
-	Render bool   `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode   string `json:"mode"`   // "smart", "static", "dynamic"
+	URL        string `json:"url"`
+	Render     bool   `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode       string `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot bool   `json:"screenshot"`
+	Images     bool   `json:"images"`
 }
 
 // NewScrapeTask creates a new task for scraping a URL.
-func NewScrapeTask(url string, render bool) (*asynq.Task, error) {
+func NewScrapeTask(url string, render bool, screenshot bool, images bool) (*asynq.Task, error) {
 	payload := ScrapePayload{
-		URL:    url,
-		Render: render,
+		URL:        url,
+		Render:     render,
+		Screenshot: screenshot,
+		Images:     images,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

@@ -51,7 +51,7 @@ func main() {
 		report += fmt.Sprintf("Error: %v\n\n", err)
 	} else {
 		report += "## ✅ Static Scrape Test Passed\n\n"
-		report += fmt.Sprintf("Saved to: `static.json`\n")
+		report += "Saved to: `static.json`\n"
 		report += fmt.Sprintf("Response size: %d bytes\n\n", len(staticRes))
 	}
 
@@ -63,7 +63,7 @@ func main() {
 		report += fmt.Sprintf("Error: %v\n\n", err)
 	} else {
 		report += "## ✅ Dynamic Scrape Test Passed\n\n"
-		report += fmt.Sprintf("Saved to: `dynamic.json`\n")
+		report += "Saved to: `dynamic.json`\n"
 		report += fmt.Sprintf("Response size: %d bytes\n\n", len(dynamicRes))
 	}
 
@@ -75,7 +75,7 @@ func main() {
 		report += fmt.Sprintf("Error: %v\n\n", err)
 	} else {
 		report += "## ✅ Async Crawl Test Passed\n\n"
-		report += fmt.Sprintf("Saved to: `crawl.json`\n")
+		report += "Saved to: `crawl.json`\n"
 		report += fmt.Sprintf("Final Status: %s\n\n", crawlRes)
 	}
 

@@ -19,7 +19,7 @@ type mockStaticScraper struct {
 	err    error
 }
 
-func (m *mockStaticScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
+func (m *mockStaticScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

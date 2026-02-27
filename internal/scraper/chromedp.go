@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -49,7 +50,7 @@ func (s *ChromedpScraper) Close() {
 	}
 }
 
-func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.ScrapeResult, error) {
+func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	// Create a new tab (Context) from the existing allocator
 	// This is much faster than starting a new browser process
 	taskCtx, cancelTask := chromedp.NewContext(s.allocCtx)
@@ -67,16 +68,22 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.Scrap
 	defer cancelTimeout()
 
 	var htmlContent string
+	var screenshotBuf []byte
 
-	logger.Log.Info("Chromedp Scraping", "url", url)
+	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
-	err := chromedp.Run(taskCtx,
+	actions := []chromedp.Action{
 		chromedp.Navigate(url),
 		// Wait for body to be visible - this ensures some content is loaded.
-		// For complex SPAs, we might want to wait for network idle, but that can be flaky.
 		chromedp.WaitVisible("body", chromedp.ByQuery),
 		chromedp.OuterHTML("html", &htmlContent),
-	)
+	}
+
+	if opts.Screenshot {
+		actions = append(actions, chromedp.FullScreenshot(&screenshotBuf, 90))
+	}
+
+	err := chromedp.Run(taskCtx, actions...)
 
 	if err != nil {
 		return nil, fmt.Errorf("chromedp failed: %w", err)
@@ -91,7 +98,7 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.Scrap
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}
 
-	return &domain.ScrapeResult{
+	result := &domain.ScrapeResult{
 		URL:      url,
 		Markdown: markdown,
 		HTML:     htmlContent,
@@ -99,5 +106,16 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string) (*domain.Scrap
 			"scraped_at": time.Now().Format(time.RFC3339),
 			"engine":     "chromedp",
 		},
-	}, nil
+	}
+
+	if opts.Screenshot && len(screenshotBuf) > 0 {
+		result.Screenshot = &domain.ScreenshotData{
+			Blob:       base64.StdEncoding.EncodeToString(screenshotBuf),
+			Format:     "jpeg",
+			SizeBytes:  int64(len(screenshotBuf)),
+			CapturedAt: time.Now(),
+		}
+	}
+
+	return result, nil
 }

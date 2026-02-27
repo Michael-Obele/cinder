@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewScrapeTask(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", false)
+	task, err := NewScrapeTask("https://example.com", false, false, false)
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestNewScrapeTask(t *testing.T) {
 }
 
 func TestNewScrapeTask_WithRender(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", true)
+	task, err := NewScrapeTask("https://example.com", true, false, false)
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestNewScrapeTask_WithRender(t *testing.T) {
 }
 
 func TestNewScrapeTask_TaskType(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", false)
+	task, err := NewScrapeTask("https://example.com", false, false, false)
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}

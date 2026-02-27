@@ -4,14 +4,17 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/scraper"
 	"github.com/standard-user/cinder/pkg/logger"
 )
 
 type ScrapeRequest struct {
-	URL    string `json:"url" binding:"required,url"`
-	Render bool   `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode   string `json:"mode"`   // "smart", "static", "dynamic"
+	URL        string `json:"url" binding:"required,url"`
+	Render     bool   `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode       string `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot bool   `json:"screenshot"`
+	Images     bool   `json:"images"`
 }
 
 type ScrapeHandler struct {
@@ -28,10 +31,12 @@ func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
 // @Tags         scrape
 // @Accept       json
 // @Produce      json
-// @Param        url    query     string  false  "The URL to scrape"
-// @Param        mode   query     string  false  "Scraping mode: smart, static, dynamic"
-// @Param        render query     bool    false  "Deprecated: use mode=dynamic instead"
-// @Param        body   body      ScrapeRequest  false  "JSON request body (alternative to query params)"
+// @Param        url        query     string  false  "The URL to scrape"
+// @Param        mode       query     string  false  "Scraping mode: smart, static, dynamic"
+// @Param        render     query     bool    false  "Deprecated: use mode=dynamic instead"
+// @Param        screenshot query     bool    false  "Capture full-page screenshot (requires mode=dynamic or smart)"
+// @Param        images     query     bool    false  "Extract images as base64 blobs"
+// @Param        body       body      ScrapeRequest  false  "JSON request body (alternative to query params)"
 // @Success      200    {object}  domain.ScrapeResult
 // @Failure      400    {object}  map[string]interface{}
 // @Failure      500    {object}  map[string]interface{}
@@ -59,6 +64,12 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	if render := c.Query("render"); render == "true" {
 		req.Render = true
 	}
+	if screenshot := c.Query("screenshot"); screenshot == "true" {
+		req.Screenshot = true
+	}
+	if images := c.Query("images"); images == "true" {
+		req.Images = true
+	}
 
 	if req.URL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "URL is required"})
@@ -74,7 +85,10 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		mode = "smart"
 	}
 
-	result, err := h.service.Scrape(c.Request.Context(), req.URL, mode)
+	result, err := h.service.Scrape(c.Request.Context(), req.URL, mode, domain.ScrapeOptions{
+		Screenshot: req.Screenshot,
+		Images:     req.Images,
+	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Scraping failed"})

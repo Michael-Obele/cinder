@@ -29,14 +29,14 @@ func NewService(colly domain.Scraper, chromedp domain.Scraper, redis *redis.Clie
 	}
 }
 
-func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.ScrapeResult, error) {
+func (s *Service) Scrape(ctx context.Context, url string, mode string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	// Default to smart if empty
 	if mode == "" {
 		mode = "smart"
 	}
 
 	// 1. Try Cache
-	cacheKey := fmt.Sprintf("scrape:%s:%s", url, mode)
+	cacheKey := fmt.Sprintf("scrape:%s:%s:%v:%v", url, mode, opts.Screenshot, opts.Images)
 	if s.redis != nil {
 		val, err := s.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
@@ -81,7 +81,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.
 		if s.chromedp == nil {
 			return nil, fmt.Errorf("dynamic scraper not configured")
 		}
-		return s.chromedp.Scrape(ctx, url)
+		return s.chromedp.Scrape(ctx, url, opts)
 	}
 
 	// Helper to run static
@@ -89,7 +89,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.
 		if s.colly == nil {
 			return nil, fmt.Errorf("static scraper not configured")
 		}
-		return s.colly.Scrape(ctx, url)
+		return s.colly.Scrape(ctx, url, opts)
 	}
 
 	switch mode {
@@ -99,6 +99,11 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string) (*domain.
 		result, err = runStatic()
 	case "smart":
 		// Fallthrough to smart logic
+		// If screenshot is requested, we MUST use dynamic.
+		if opts.Screenshot {
+			return runDynamic()
+		}
+
 		// 1. Try static first (fast & cheap)
 		result, err = runStatic()
 

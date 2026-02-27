@@ -217,8 +217,8 @@ func TestScrapeOptions_Defaults(t *testing.T) {
 	if opts.Screenshot != false {
 		t.Error("Screenshot should default to false")
 	}
-	if opts.ExtractImages != false {
-		t.Error("ExtractImages should default to false")
+	if opts.Images != false {
+		t.Error("Images should default to false")
 	}
 	if opts.ImageFormat != "" {
 		t.Error("ImageFormat should default to empty")
