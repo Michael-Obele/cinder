@@ -2,6 +2,8 @@
 
 A comprehensive guide to understanding this Go codebase, written specifically for full-stack Svelte/TypeScript developers.
 
+> **Looking for a practical workflow?** If you just want to know how to start the server, ping the API from SvelteKit, test, and debug, head over to the [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md).
+
 ---
 
 ## Table of Contents

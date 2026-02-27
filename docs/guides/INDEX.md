@@ -13,6 +13,8 @@ If you're new to Go, read these in order:
 | 1   | [Go for Svelte Devs](GO_FOR_SVELTE_DEVS.md)   | Mental models, comparisons to JS/TS | 20 min |
 | 2   | [Go Syntax Reference](GO_SYNTAX_REFERENCE.md) | Quick reference for Go syntax       | 10 min |
 | 3   | [Code Walkthrough](CODE_WALKTHROUGH.md)       | File-by-file annotated code         | 30 min |
+| 4   | [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md) | How to run, use, test, and debug    | 15 min |
+| 5   | [Swagger Documentation](SWAGGER.md)           | Interactive API docs and schema     | 5 min  |
 
 ---
 
@@ -33,6 +35,27 @@ If you're new to Go, read these in order:
 - Packages and imports
 - Context (like SvelteKit's event)
 - Goroutines (async/await equivalent)
+
+### [SVELTE_DEV_WORKFLOW.md](SVELTE_DEV_WORKFLOW.md)
+
+**Audience**: Svelte/TypeScript developers actively working on this project (cinder or cinder-js)
+
+**Covers**:
+
+- How to run the Go backend alongside a Svelte frontend
+- How to consume the Go API in SvelteKit (`+page.server.ts`)
+- How to run backend unit tests vs frontend Vitest
+- How to debug the API using VS Code and `logger`
+
+### [SWAGGER.md](SWAGGER.md)
+
+**Audience**: Frontend developers integrating with the API
+
+**Covers**:
+
+- How to access the live Swagger UI playground
+- Understanding endpoints and response shapes
+- How to generate and update the static API schema with `swag init`
 
 ### [GO_SYNTAX_REFERENCE.md](GO_SYNTAX_REFERENCE.md)
 
@@ -183,27 +206,37 @@ POST /v1/crawl
 
 ## Quick Commands
 
+*For a more detailed breakdown tailored to JS/Svelte developers, see [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md).*
+
 ```bash
 # Development
-go run ./cmd/api          # Start server
-go run ./cmd/worker       # Start standalone worker
+go run ./cmd/api          # Start server (Monolith API + worker)
+go run ./cmd/worker       # Start standalone worker (Optional now, API embeds it)
+```
 
+```bash
 # Building
 go build -o bin/api ./cmd/api
 go build -o bin/worker ./cmd/worker
+```
 
-# Testing
+```bash
+# Testing (See TESTING.md for full guide)
 go test ./...             # All tests
 go test -v ./...          # Verbose
 go test -cover ./...      # With coverage
+```
 
+```bash
 # Dependencies
-go mod download           # Install deps
-go mod tidy               # Clean up go.mod
+go mod download           # Install deps (like npm install)
+go mod tidy               # Clean up go.mod (remove unused, add used)
+```
 
+```bash
 # Code quality
-go fmt ./...              # Format code
-go vet ./...              # Static analysis
+go fmt ./...              # Format code (like Prettier)
+go vet ./...              # Static analysis (like ESLint)
 ```
 
 ---
