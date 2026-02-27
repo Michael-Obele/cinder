@@ -1,6 +1,7 @@
 # Image Blob Transport — AI-Ready Image Pipeline
 
 > Detailed plan for capturing, encoding, and transporting images as self-contained blobs that can be directly fed into multimodal AI APIs (OpenAI GPT-4o, Google Gemini, Anthropic Claude, etc.).
+> See [Documentation Index](../guides/INDEX.md) for core guides.
 
 **Status**: Planning Phase — Ready for Implementation  
 **Last Updated**: February 26, 2026  

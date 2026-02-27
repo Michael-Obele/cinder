@@ -2,6 +2,9 @@
 
 Welcome to the day-to-day workflow guide! As a Svelte developer working on Cinder, you're bridging the gap between a robust Go backend and a sleek Svelte/JS frontend ecosystem. This guide tells you exactly how to spin things up, handle integrations, and troubleshoot when things go wrong.
 
+> [!IMPORTANT]
+> This guide focuses on **daily development tasks**. For a deeper understanding of the code, see the [Go for Svelte Devs](GO_FOR_SVELTE_DEVS.md) guide and the [Documentation Index](INDEX.md).
+
 ---
 
 ## 🏃 1. How to Run the Project
@@ -18,10 +21,11 @@ go run cmd/api/main.go
 ```
 
 **What this does:**
+
 - Starts the HTTP API on `http://localhost:8080`
 - Automatically starts the background worker (listening to Redis) within the same process.
 - Hot-reloading is not built into Go by default (unlike Vite). If you make a change to a `.go` file, you need to stop (`Ctrl+C`) and re-run the command.
-  - *Pro-tip:* Install `air` (`go install github.com/cosmtrek/air@latest`) and just run `air` in the terminal for hot-reloading!
+  - _Pro-tip:_ Install `air` (`go install github.com/cosmtrek/air@latest`) and just run `air` in the terminal for hot-reloading!
 
 ### Running the Frontend / JS Services
 
@@ -33,7 +37,7 @@ npm install
 npm run dev
 ```
 
-This runs your standard Vite dev server, typically on `http://localhost:5173`. 
+This runs your standard Vite dev server, typically on `http://localhost:5173`.
 
 ---
 
@@ -45,33 +49,33 @@ As a Svelte developer, your main interaction with the Go backend will be via `fe
 
 ```typescript
 // src/routes/dashboard/+page.server.ts
-import type { PageServerLoad } from './$types';
+import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ fetch }) => {
-    // 1. Hit the local Go backend
-    const response = await fetch('http://localhost:8080/v1/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            url: 'https://example.com',
-            mode: 'smart' // 'static', 'dynamic', or 'smart'
-        })
-    });
+  // 1. Hit the local Go backend
+  const response = await fetch("http://localhost:8080/v1/scrape", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: "https://example.com",
+      mode: "smart", // 'static', 'dynamic', or 'smart'
+    }),
+  });
 
-    if (!response.ok) {
-        // Handle Go error responses
-        const errorData = await response.json();
-        console.error("Cinder API Error:", errorData);
-        return { error: 'Failed to scrape' };
-    }
+  if (!response.ok) {
+    // Handle Go error responses
+    const errorData = await response.json();
+    console.error("Cinder API Error:", errorData);
+    return { error: "Failed to scrape" };
+  }
 
-    const data = await response.json();
-    
-    // 2. Pass the Markdown/HTML to the Svelte component
-    return {
-        markdown: data.markdown,
-        metadata: data.metadata
-    };
+  const data = await response.json();
+
+  // 2. Pass the Markdown/HTML to the Svelte component
+  return {
+    markdown: data.markdown,
+    metadata: data.metadata,
+  };
 };
 ```
 
@@ -97,14 +101,16 @@ go test ./internal/scraper/... -v
 ```
 
 **Mental mapping:**
+
 - `describe()` / `it()` -> `func TestSomething(t *testing.T) { t.Run(...) }`
 - `expect(x).toBe(y)` -> `if x != y { t.Errorf(...) }`
 
-*For more in-depth testing setup, check out the [Testing Guide](TESTING.md).*
+_For more in-depth testing setup, check out the [Testing Guide](TESTING.md)._
 
 ### Testing the Svelte/JS Side
 
 Business as usual!
+
 ```bash
 # In your Svelte project
 npm run test:unit      # Vitest
@@ -128,19 +134,19 @@ Don't just use `fmt.Println` (the Go equivalent of `console.log`). Use the debug
 4. Replace the contents of `.vscode/launch.json` with:
    ```json
    {
-       "version": "0.2.0",
-       "configurations": [
-           {
-               "name": "Launch Cinder API",
-               "type": "go",
-               "request": "launch",
-               "mode": "auto",
-               "program": "${workspaceFolder}/cmd/api/main.go",
-               "env": {
-                   "LOG_LEVEL": "debug"
-               }
-           }
-       ]
+     "version": "0.2.0",
+     "configurations": [
+       {
+         "name": "Launch Cinder API",
+         "type": "go",
+         "request": "launch",
+         "mode": "auto",
+         "program": "${workspaceFolder}/cmd/api/main.go",
+         "env": {
+           "LOG_LEVEL": "debug"
+         }
+       }
+     ]
    }
    ```
 5. Set breakpoints in your `.go` files by clicking the gutter.

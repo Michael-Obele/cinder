@@ -1,10 +1,13 @@
 # Cinder Architecture Guide (For JS/SvelteKit Developers)
 
+> [!TIP]
+> New here? Start with the [Documentation Index](INDEX.md) for a guided tour.
+
 Welcome to the Cinder codebase! If you're coming from a SvelteKit/Node.js background, some Go patterns might feel "different." This guide bridges that gap by comparing Go's structure and syntax to the JS ecosystem you already know.
 
 ## 🏗 High-Level Architecture
 
-Cinder is a Go-based distributed scraper (a lightweight alternative to Firecrawl). It uses a **Task Queue** pattern to handle long-running scrapes without blocking the main API.
+Cinder is a Go-based distributed scraper (a lightweight alternative to Firecrawl). It uses a **Task Queue** pattern to handle long-running scrapes without blocking the main API. For a more detailed look at the project layout, see the [Project Tour](PROJECT_TOUR.md).
 
 ### Project Layout (Standard Go)
 
@@ -266,12 +269,10 @@ Leapcell is a serverless platform perfect for Go applications with async workers
    ```
 
 2. **Connect GitHub to Leapcell**:
-
    - Go to [Leapcell Dashboard](https://leapcell.io/dashboard)
    - Follow instructions to connect your GitHub account
 
 3. **Create a new service**:
-
    - Click "New Service"
    - Select your repository from the list
    - Configure the service:

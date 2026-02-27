@@ -1,8 +1,9 @@
 # Testing Guide
 
 > How to run, write, and maintain tests for Cinder.
+> See [Documentation Index](INDEX.md) for related guides.
 
-*If you are looking for the overall workflow for Svelte devs, please see the [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md).*
+_If you are looking for the overall workflow for Svelte devs, please see the [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md)._
 
 ---
 

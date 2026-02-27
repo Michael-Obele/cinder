@@ -1,6 +1,7 @@
 # Image and Screenshot Feature Implementation Plan
 
 **Document Location:** `docs/features/image-screenshot-feature.md`
+**Related:** [Image Blob Transport](./image-blob-transport.md) | [Documentation Index](../guides/INDEX.md)
 
 ---
 

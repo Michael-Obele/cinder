@@ -18,6 +18,20 @@ If you're new to Go, read these in order:
 
 ---
 
+## 🏗️ Core Architecture & Features
+
+| Document                                                      | Description                                     |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| [Architecture Guide](ARCHITECTURE.md)                         | High-level design and task queue patterns       |
+| [Project Tour](PROJECT_TOUR.md)                               | Visual map of the codebase for JS devs          |
+| [Performance Changes](CHANGELOG_JS.md)                        | How the browser context pool optimization works |
+| [Testing Guide](TESTING.md)                                   | How to run and write Go tests                   |
+| **Features Explorer**                                         |                                                 |
+| [Screenshot Feature](../features/image-screenshot-feature.md) | Capturing page screenshots                      |
+| [Image Blob Transport](../features/image-blob-transport.md)   | AI-ready image pipeline                         |
+
+---
+
 ## Documentation Overview
 
 ### [GO_FOR_SVELTE_DEVS.md](GO_FOR_SVELTE_DEVS.md)
@@ -206,7 +220,7 @@ POST /v1/crawl
 
 ## Quick Commands
 
-*For a more detailed breakdown tailored to JS/Svelte developers, see [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md).*
+_For a more detailed breakdown tailored to JS/Svelte developers, see [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md)._
 
 ```bash
 # Development

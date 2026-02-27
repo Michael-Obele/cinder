@@ -2,6 +2,10 @@
 
 A detailed file-by-file exploration of the Cinder codebase with annotated code examples.
 
+> [!TIP]
+> This is a deep dive. For a high-level overview, check the [Architecture Guide](ARCHITECTURE.md) or the [Project Tour](PROJECT_TOUR.md).
+> See [Documentation Index](INDEX.md) for related guides.
+
 ---
 
 ## Entry Points (`cmd/`)

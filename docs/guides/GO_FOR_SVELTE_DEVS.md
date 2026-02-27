@@ -2,6 +2,8 @@
 
 A comprehensive guide to understanding this Go codebase, written specifically for full-stack Svelte/TypeScript developers.
 
+> **Looking for the main index?** [Documentation Index](INDEX.md)
+>
 > **Looking for a practical workflow?** If you just want to know how to start the server, ping the API from SvelteKit, test, and debug, head over to the [Svelte Dev Workflow](SVELTE_DEV_WORKFLOW.md).
 
 ---
@@ -10,17 +12,18 @@ A comprehensive guide to understanding this Go codebase, written specifically fo
 
 1. [Quick Mental Model](#quick-mental-model)
 2. [Go vs TypeScript/JavaScript Cheatsheet](#go-vs-typescriptjavascript-cheatsheet)
-3. [Project Structure Explained](#project-structure-explained)
-4. [The `go.mod` File (Like `package.json`)](#the-gomod-file-like-packagejson)
-5. [Imports Deep Dive](#imports-deep-dive)
-6. [Package System](#package-system)
-7. [Types, Structs, and Interfaces](#types-structs-and-interfaces)
-8. [Functions and Methods](#functions-and-methods)
-9. [Error Handling](#error-handling)
-10. [Pointers (The Scary Part That Isn't)](#pointers-the-scary-part-that-isnt)
-11. [Context (Like SvelteKit's `event`)](#context-like-sveltekits-event)
-12. [Concurrency with Goroutines](#concurrency-with-goroutines)
-13. [File-by-File Breakdown](#file-by-file-breakdown)
+3. [Go Syntax Reference](GO_SYNTAX_REFERENCE.md)
+4. [Project Structure Explained](#project-structure-explained)
+5. [The `go.mod` File (Like `package.json`)](#the-gomod-file-like-packagejson)
+6. [Imports Deep Dive](#imports-deep-dive)
+7. [Package System](#package-system)
+8. [Types, Structs, and Interfaces](#types-structs-and-interfaces)
+9. [Functions and Methods](#functions-and-methods)
+10. [Error Handling](#error-handling)
+11. [Pointers (The Scary Part That Isn't)](#pointers-the-scary-part-that-isnt)
+12. [Context (Like SvelteKit's `event`)](#context-like-sveltekits-event)
+13. [Concurrency with Goroutines](#concurrency-with-goroutines)
+14. [File-by-File Breakdown](#file-by-file-breakdown)
 
 ---
 

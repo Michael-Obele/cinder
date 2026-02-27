@@ -20,16 +20,17 @@ The Swagger interface allows you to view all available endpoints, required param
 
 ## Updating the Swagger Documentation
 
-The Swagger documentation is generated statically from annotations in the Go source code. If you add a new endpoint or change an existing request/response structure, you must regenerate the Swagger spec files.
+The Swagger documentation is generated dynamically when the API server is started in `debug` mode. 
 
-### 1. Install Swag CLI
-If you haven't already, install the `swag` command-line tool:
+By default, the server runs in `debug` mode unless `SERVER_MODE=release` is set. When running in debug mode via `go run cmd/api/main.go`, the server will automatically find the Swag CLI and run the following command to regenerate the documentation before listening for requests:
+
 ```bash
-go install github.com/swaggo/swag/cmd/swag@latest
+go run github.com/swaggo/swag/cmd/swag@latest init -d ./cmd/api,./internal/api/handlers,./internal/domain -g main.go -o internal/api/docs --parseDependency --parseInternal
 ```
 
-### 2. Add or Update Annotations
-Cinder uses declarative `// @...` comments above handler functions.
+### Adding Annotations
+If you add a new endpoint or change an existing request/response structure, you just need to add the declarative `// @...` comments above your handler functions and restart the server.
+
 For example, in `internal/api/handlers/scrape.go`:
 ```go
 // @Summary      Scrape a webpage
@@ -45,17 +46,4 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 }
 ```
 
-### 3. Generate the Files
-Because Cinder's `main.go` and handlers are located in different directories, you must run the following exact command from the root of the repository to regenerate the docs:
-
-```bash
-~/go/bin/swag init -d ./cmd/api,./internal/api/handlers,./internal/domain -g main.go -o internal/api/docs --parseDependency --parseInternal
-```
-
-#### What this command does:
-- `-d ./cmd/api,./internal/api/handlers,./internal/domain`: Instructs Swag to search these directories for annotations.
-- `-g main.go`: Points to the main file containing the general API info (e.g., `@title`, `@version`).
-- `-o internal/api/docs`: Outputs the resulting `swagger.json`, `swagger.yaml`, and `docs.go` files to this specific internal directory to keep the root clean.
-- `--parseDependency --parseInternal`: Ensures that structures located outside standard scopes (like the domain models) are successfully resolved by the parser.
-
-After running this command, simply restart your API server, and the new changes will be visible in the browser UI.
+Once you restart the server, the changes will be automatically picked up and visible in the browser UI.

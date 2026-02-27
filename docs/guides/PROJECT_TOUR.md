@@ -1,10 +1,12 @@
 # Cinder: The Svelte/JS Developer's Guide
 
+> Looking for documentation for a specific part of the code? Check the [Documentation Index](INDEX.md).
+
 Welcome to Cinder! If you're coming from the JavaScript/TypeScript ecosystem (SvelteKit, Next.js, Node.js), this guide is designed to translate Go concepts into terms you already understand.
 
 ## 🗺️ Project Map (File Tree)
 
-Here is the layout of the project, annotated with "JS equivalents".
+For a deeper dive into the architecture, check the [Architecture Guide](ARCHITECTURE.md).
 
 ```text
 cinder/

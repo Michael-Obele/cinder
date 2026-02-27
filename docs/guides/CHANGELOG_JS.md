@@ -2,6 +2,9 @@
 
 We've just optimized the Cinder scraping engine. If you're coming from a Node.js/JS background (Puppeteer/Playwright), here is what changed and why.
 
+> [!NOTE]
+> For a full walkthrough of the current codebase structure, see the [Code Walkthrough](CODE_WALKTHROUGH.md) or the [Documentation Index](INDEX.md).
+
 ## 1. The "Browser Context" Pattern (vs Spawning Processes)
 
 **Old Way (The "PHP" way):**

@@ -2,6 +2,8 @@
 
 A compact reference for Go syntax patterns, shorthands, and idioms found in this codebase.
 
+> Part of the [Go for Svelte Devs](GO_FOR_SVELTE_DEVS.md) guide. See [Documentation Index](INDEX.md).
+
 ---
 
 ## Variable Declarations
