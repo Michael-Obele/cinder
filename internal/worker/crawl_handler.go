@@ -44,12 +44,36 @@ func NewCrawlTaskHandler(scraper *scraper.Service, logger *slog.Logger) *CrawlTa
 	}
 }
 
+// ProcessTask is the Asynq entry point — it deserializes the payload,
+// delegates to ExecuteCrawl, and writes the result back to Asynq.
 func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	var payload CrawlPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal crawl payload: %w, task_id=%s", err, t.ResultWriter().TaskID())
 	}
 
+	taskID := t.ResultWriter().TaskID()
+
+	result, err := h.ExecuteCrawl(ctx, payload, taskID)
+	if err != nil {
+		return err
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal crawl result: %w", err)
+	}
+
+	if _, err := t.ResultWriter().Write(resultJSON); err != nil {
+		h.logger.Error("Failed to write crawl result", "error", err, "task_id", taskID)
+	}
+
+	return nil
+}
+
+// ExecuteCrawl performs the actual BFS crawl. Extracted from ProcessTask
+// so it can be tested independently of Asynq infrastructure.
+func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayload, taskID string) (*CrawlResult, error) {
 	// Apply sensible defaults and caps
 	maxDepth := payload.MaxDepth
 	if maxDepth <= 0 {
@@ -78,7 +102,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 
 	seedURL, err := url.Parse(payload.URL)
 	if err != nil {
-		return fmt.Errorf("invalid seed URL %q: %w", payload.URL, err)
+		return nil, fmt.Errorf("invalid seed URL %q: %w", payload.URL, err)
 	}
 	allowedHost := seedURL.Hostname()
 
@@ -87,7 +111,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		"maxDepth", maxDepth,
 		"limit", limit,
 		"mode", mode,
-		"task_id", t.ResultWriter().TaskID(),
+		"task_id", taskID,
 	)
 
 	// BFS state
@@ -106,7 +130,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 	for len(queue) > 0 && len(results) < limit {
 		// Check context cancellation
 		if ctx.Err() != nil {
-			h.logger.Warn("Crawl cancelled", "task_id", t.ResultWriter().TaskID(), "reason", ctx.Err())
+			h.logger.Warn("Crawl cancelled", "task_id", taskID, "reason", ctx.Err())
 			break
 		}
 
@@ -119,7 +143,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 			"depth", entry.depth,
 			"scraped", len(results),
 			"queued", len(queue),
-			"task_id", t.ResultWriter().TaskID(),
+			"task_id", taskID,
 		)
 
 		// Scrape the page
@@ -130,7 +154,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		if scrapeErr != nil {
 			h.logger.Warn("Failed to scrape page during crawl",
 				"url", entry.url, "error", scrapeErr,
-				"task_id", t.ResultWriter().TaskID(),
+				"task_id", taskID,
 			)
 			failed = append(failed, FailedURL{URL: entry.url, Error: scrapeErr.Error()})
 			continue
@@ -160,7 +184,7 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		status = "partial"
 	}
 
-	crawlResult := CrawlResult{
+	crawlResult := &CrawlResult{
 		Status:     status,
 		TotalPages: len(results),
 		MaxDepth:   maxDepth,
@@ -169,24 +193,15 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		FailedURLs: failed,
 	}
 
-	resultJSON, err := json.Marshal(crawlResult)
-	if err != nil {
-		return fmt.Errorf("failed to marshal crawl result: %w", err)
-	}
-
-	if _, err := t.ResultWriter().Write(resultJSON); err != nil {
-		h.logger.Error("Failed to write crawl result", "error", err, "task_id", t.ResultWriter().TaskID())
-	}
-
 	h.logger.Info("Crawl completed",
 		"url", payload.URL,
 		"totalPages", len(results),
 		"failedPages", len(failed),
 		"status", status,
-		"task_id", t.ResultWriter().TaskID(),
+		"task_id", taskID,
 	)
 
-	return nil
+	return crawlResult, nil
 }
 
 // extractLinks parses HTML and returns same-domain, non-resource links.

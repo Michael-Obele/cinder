@@ -156,3 +156,119 @@ func TestScrapePayload_ModeMapping(t *testing.T) {
 		})
 	}
 }
+
+// --- CrawlTask Tests ---
+
+func TestNewCrawlTask(t *testing.T) {
+	task, err := NewCrawlTask("https://example.com", false, false, false, 3, 20)
+	if err != nil {
+		t.Fatalf("NewCrawlTask failed: %v", err)
+	}
+
+	if task == nil {
+		t.Fatal("Task should not be nil")
+	}
+
+	if task.Type() != TypeCrawl {
+		t.Errorf("Task type should be %q, got %q", TypeCrawl, task.Type())
+	}
+
+	// Verify payload
+	var payload CrawlPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		t.Fatalf("Failed to unmarshal payload: %v", err)
+	}
+
+	if payload.URL != "https://example.com" {
+		t.Errorf("URL mismatch: got %q", payload.URL)
+	}
+	if payload.MaxDepth != 3 {
+		t.Errorf("MaxDepth mismatch: got %d, want 3", payload.MaxDepth)
+	}
+	if payload.Limit != 20 {
+		t.Errorf("Limit mismatch: got %d, want 20", payload.Limit)
+	}
+}
+
+func TestNewCrawlTask_WithAllOptions(t *testing.T) {
+	task, err := NewCrawlTask("https://docs.example.com", true, true, true, 5, 50)
+	if err != nil {
+		t.Fatalf("NewCrawlTask failed: %v", err)
+	}
+
+	var payload CrawlPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	if !payload.Render {
+		t.Error("Render should be true")
+	}
+	if !payload.Screenshot {
+		t.Error("Screenshot should be true")
+	}
+	if !payload.Images {
+		t.Error("Images should be true")
+	}
+	if payload.MaxDepth != 5 {
+		t.Errorf("MaxDepth = %d, want 5", payload.MaxDepth)
+	}
+	if payload.Limit != 50 {
+		t.Errorf("Limit = %d, want 50", payload.Limit)
+	}
+}
+
+func TestCrawlPayload_JSON_Roundtrip(t *testing.T) {
+	original := CrawlPayload{
+		URL:        "https://example.com",
+		Render:     false,
+		Mode:       "smart",
+		Screenshot: true,
+		Images:     false,
+		MaxDepth:   4,
+		Limit:      30,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+
+	var decoded CrawlPayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	if decoded.URL != original.URL {
+		t.Errorf("URL mismatch")
+	}
+	if decoded.MaxDepth != original.MaxDepth {
+		t.Errorf("MaxDepth mismatch: got %d, want %d", decoded.MaxDepth, original.MaxDepth)
+	}
+	if decoded.Limit != original.Limit {
+		t.Errorf("Limit mismatch: got %d, want %d", decoded.Limit, original.Limit)
+	}
+	if decoded.Screenshot != original.Screenshot {
+		t.Errorf("Screenshot mismatch")
+	}
+}
+
+func TestCrawlPayload_DefaultsFromJSON(t *testing.T) {
+	// When maxDepth and limit are omitted from JSON, they default to 0 (Go zero value)
+	input := `{"url":"https://example.com"}`
+
+	var payload CrawlPayload
+	if err := json.Unmarshal([]byte(input), &payload); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	if payload.URL != "https://example.com" {
+		t.Errorf("URL mismatch")
+	}
+	if payload.MaxDepth != 0 {
+		t.Errorf("MaxDepth should be 0 (zero value) when omitted, got %d", payload.MaxDepth)
+	}
+	if payload.Limit != 0 {
+		t.Errorf("Limit should be 0 (zero value) when omitted, got %d", payload.Limit)
+	}
+}
