@@ -112,41 +112,53 @@ curl -X POST http://localhost:8080/v1/search \
 ---
 
 ## 3. Asynchronous Crawl (Enqueue)
-Submits a URL to be crawled asynchronously using the background worker queue.
+Submits a seed URL to be crawled asynchronously using the background worker queue. The crawler performs **BFS (breadth-first) link-following**, scraping pages on the same domain up to the configured depth and page limit.
+
 **Important:** Asynchronous crawling requires an active Redis connection (`REDIS_URL` in config).
 
 ### Endpoints
 - `POST /v1/crawl`
 
 ### Request Parameters
-Accepts standard scraping parameters inside a JSON body.
+Accepts a JSON body with scraping parameters and crawl-specific options.
 
-| Parameter    | Type    | Required | Default | Description                          |
-| ------------ | ------- | -------- | ------- | ------------------------------------ |
-| `url`        | string  | **Yes**  | -       | The URL to crawl asynchronously.     |
-| `render`     | boolean | No       | `false` | Render JavaScript.                   |
-| `screenshot` | boolean | No       | `false` | Capture screenshots during crawling. |
-| `images`     | boolean | No       | `false` | Extract images.                      |
+| Parameter    | Type    | Required | Default | Description                                                     |
+| ------------ | ------- | -------- | ------- | --------------------------------------------------------------- |
+| `url`        | string  | **Yes**  | -       | The seed URL to start crawling from.                            |
+| `maxDepth`   | int     | No       | `2`     | Maximum link-following depth from the seed URL. Capped at `10`. |
+| `limit`      | int     | No       | `10`    | Maximum total number of pages to scrape. Capped at `100`.       |
+| `render`     | boolean | No       | `false` | Render JavaScript for each page (uses headless browser).        |
+| `screenshot` | boolean | No       | `false` | Capture screenshots for each scraped page.                      |
+| `images`     | boolean | No       | `false` | Extract images from each scraped page.                          |
+
+### Crawl Behavior
+- **Domain-locked**: The crawler only follows links on the same hostname as the seed URL.
+- **Deduplication**: Each URL is visited only once per crawl job.
+- **Resource filtering**: Non-HTML resources (`.pdf`, `.jpg`, `.css`, `.js`, etc.) are automatically skipped.
 
 ### Example Request
 ```bash
 curl -X POST http://localhost:8080/v1/crawl \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com",
-    "render": true
+    "url": "https://docs.example.com",
+    "maxDepth": 3,
+    "limit": 20,
+    "render": false
   }'
 ```
 
 ### Example Response
-Returns an HTTP `202 Accepted` indicating that the task was successfully added to the queue.
+Returns an HTTP `202 Accepted` indicating that the crawl task was successfully added to the queue.
 ```json
 {
   "id": "e8a932c0-82af-4a11-bd4a-6f17e29b1111",
-  "url": "https://example.com",
-  "render": true,
+  "url": "https://docs.example.com",
+  "render": false,
   "screenshot": false,
-  "images": false
+  "images": false,
+  "maxDepth": 3,
+  "limit": 20
 }
 ```
 
@@ -163,19 +175,43 @@ Retrieves the current status and result of a previously enqueued crawl task usin
 curl http://localhost:8080/v1/crawl/e8a932c0-82af-4a11-bd4a-6f17e29b1111
 ```
 
-### Example Response
+### Example Response (In Progress)
 ```json
 {
   "id": "e8a932c0-82af-4a11-bd4a-6f17e29b1111",
   "queue": "default",
   "state": "active",
-  "max_retry": 5,
+  "max_retry": 2,
   "retried": 0,
-  "payload": "{\"url\":\"https://example.com\",\"render\":true,\"screenshot\":false,\"images\":false}",
+  "payload": "{\"url\":\"https://docs.example.com\",\"maxDepth\":3,\"limit\":20}",
   "result": ""
 }
 ```
-*Note: Wait for `state` to change to `completed` to consume the content returned in `result` (which will contain the fully serialized JSON of the scrape response).*
+
+### Example Response (Completed)
+When the crawl finishes, `state` becomes `"completed"` and `result` contains a JSON string with the full crawl output:
+```json
+{
+  "id": "e8a932c0-82af-4a11-bd4a-6f17e29b1111",
+  "queue": "default",
+  "state": "completed",
+  "max_retry": 2,
+  "retried": 0,
+  "payload": "...",
+  "result": "{\"status\":\"completed\",\"total\":5,\"maxDepth\":3,\"limit\":20,\"data\":[{\"url\":\"https://docs.example.com\",\"markdown\":\"...\",\"metadata\":{...}}, ...]}"
+}
+```
+
+The `result` field, when parsed, has the following structure:
+
+| Field        | Type             | Description                                                            |
+| ------------ | ---------------- | ---------------------------------------------------------------------- |
+| `status`     | string           | `"completed"`, `"partial"` (some pages failed), `"failed"`             |
+| `total`      | int              | Total pages successfully scraped.                                      |
+| `maxDepth`   | int              | The maxDepth that was used.                                            |
+| `limit`      | int              | The limit that was used.                                               |
+| `data`       | array            | Array of `ScrapeResult` objects (same shape as `/v1/scrape` response). |
+| `failedUrls` | array (optional) | URLs that failed to scrape, with error messages.                       |
 
 ---
 
