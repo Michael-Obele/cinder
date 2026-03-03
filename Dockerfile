@@ -26,6 +26,7 @@ ENV CHROME_PATH=/usr/lib/chromium/
 WORKDIR /app
 COPY --from=builder /app/cinder-api .
 COPY --from=builder /app/cinder-worker .
+COPY --from=builder /app/internal/api/docs ./internal/api/docs
 
 EXPOSE 8080
 
