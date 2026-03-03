@@ -79,6 +79,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 }
 
 func RegisterHandlers(mux *asynq.ServeMux, scraper *scraper.Service, logger *slog.Logger) {
-	handler := NewScrapeTaskHandler(scraper, logger)
-	mux.HandleFunc(TypeScrape, handler.ProcessTask)
+	scrapeHandler := NewScrapeTaskHandler(scraper, logger)
+	mux.HandleFunc(TypeScrape, scrapeHandler.ProcessTask)
+
+	crawlHandler := NewCrawlTaskHandler(scraper, logger)
+	mux.HandleFunc(TypeCrawl, crawlHandler.ProcessTask)
 }

@@ -16,6 +16,8 @@ type CrawlRequest struct {
 	Render     bool   `json:"render"`
 	Screenshot bool   `json:"screenshot"`
 	Images     bool   `json:"images"`
+	MaxDepth   int    `json:"maxDepth"`
+	Limit      int    `json:"limit"`
 }
 
 type CrawlResponse struct {
@@ -24,6 +26,8 @@ type CrawlResponse struct {
 	Render     bool   `json:"render"`
 	Screenshot bool   `json:"screenshot"`
 	Images     bool   `json:"images"`
+	MaxDepth   int    `json:"maxDepth"`
+	Limit      int    `json:"limit"`
 }
 
 type CrawlHandler struct {
@@ -67,7 +71,7 @@ func (h *CrawlHandler) Close() {
 
 // EnqueueCrawl godoc
 // @Summary      Enqueue a URL for asynchronous crawling
-// @Description  Submits a URL to be crawled asynchronously using the background worker queue. Requires Redis.
+// @Description  Submits a URL to be crawled asynchronously. The crawler performs BFS link-following up to maxDepth, scraping up to limit pages on the same domain. Requires Redis.
 // @Tags         crawl
 // @Accept       json
 // @Produce      json
@@ -83,7 +87,21 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 		return
 	}
 
-	task, err := worker.NewScrapeTask(req.URL, req.Render, req.Screenshot, req.Images)
+	// Apply defaults
+	if req.MaxDepth <= 0 {
+		req.MaxDepth = 2
+	}
+	if req.MaxDepth > 10 {
+		req.MaxDepth = 10
+	}
+	if req.Limit <= 0 {
+		req.Limit = 10
+	}
+	if req.Limit > 100 {
+		req.Limit = 100
+	}
+
+	task, err := worker.NewCrawlTask(req.URL, req.Render, req.Screenshot, req.Images, req.MaxDepth, req.Limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
@@ -101,6 +119,8 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 		Render:     req.Render,
 		Screenshot: req.Screenshot,
 		Images:     req.Images,
+		MaxDepth:   req.MaxDepth,
+		Limit:      req.Limit,
 	})
 }
 
@@ -115,26 +135,22 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 // @Router       /crawl/{id} [get]
 func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 	id := c.Param("id")
-	info, err := h.inspector.GetTaskInfo("default", id) // Assuming default queue for simple lookup, but we might need to search all queues
-	// Actually GetTaskInfo takes (queue, id). If we don't know the queue, passing empty string usually fails or isn't supported directly easily without listing.
-	// Asynq Inspector GetTaskInfo requires queue name.
-	// Let's assume 'default' queue for now or check 'critical'/'low' if allowed.
-	// A better way is using `inspector.GetTaskInfo` (it DOES require queue name).
-	// For simplicity, we'll try "default". If not found, we might return error.
 
-	// Wait, generic GetTaskInfo might not exist across queues.
-	// Let's check simply providing queue "default".
-	if err != nil {
-		// Try critical
-		info, err = h.inspector.GetTaskInfo("critical", id)
-		if err != nil {
-			// Try low
-			info, err = h.inspector.GetTaskInfo("low", id)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
-				return
-			}
+	// Search across all configured queues
+	queues := []string{"default", "critical", "low"}
+	var info *asynq.TaskInfo
+	var err error
+
+	for _, q := range queues {
+		info, err = h.inspector.GetTaskInfo(q, id)
+		if err == nil {
+			break
 		}
+	}
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
