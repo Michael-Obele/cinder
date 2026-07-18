@@ -24,6 +24,22 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger(logger))
 
+	// Root health check — Fly.io uses this to verify the app is alive.
+	// All API routes live under /v1.
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"service": "cinder",
+			"version": "1.0",
+			"status":  "ok",
+			"docs":    "/swagger/index.html",
+			"endpoints": gin.H{
+				"scrape": "/v1/scrape",
+				"search": "/v1/search",
+				"crawl":  "/v1/crawl",
+			},
+		})
+	})
+
 	// Swagger Docs mapping
 	if cfg.Server.Mode == "debug" {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

@@ -10,6 +10,7 @@ func TestLoad_Defaults(t *testing.T) {
 	envsToClear := []string{
 		"PORT", "SERVER_MODE", "APP_LOGLEVEL",
 		"REDIS_URL", "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD",
+		"UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN",
 		"BRAVE_SEARCH_API_KEY",
 		"SERVER_PORT", "SERVER_MODE",
 	}
