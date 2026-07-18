@@ -1,0 +1,59 @@
+# ── Dependencies & build caches ─────────────────────────────────────
+vendor/
+node_modules/
+.cache/
+.pytest_cache/
+
+# ── IDE / editor ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.swp
+
+# ── OS files ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Secrets & env ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Artifacts ───────────────────────────────────────────────────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+_build/
+dist/
+coverage.out
+logs/
+*.log
+*.tmp
+
+# ── Docs / generated ────────────────────────────────────────────────
+docs/
+test_reports/
+mastra_plan/
+
+# ── JS sub-projects (not needed for Go build) ───────────────────────
+cinder-js/
+cinder-js-gpt/
+
+# ── Git / config ────────────────────────────────────────────────────
+.git/
+.github/
+.gitignore
+*.md
+LICENSE
+
+# ── Agent configs (not needed at runtime) ───────────────────────────
+.agent/
+.agents/
+.gemini/
+.kiro/
+.windsurf/

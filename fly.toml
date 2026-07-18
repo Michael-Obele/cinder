@@ -1,0 +1,57 @@
+# fly.toml — Cinder deployment config for Fly.io (Hobby/Free tier)
+#
+# Cinder runs in monolith mode by default: the API process includes an
+# embedded Asynq worker for background crawl jobs.
+#
+# ── Cost targets ──────────────────────────────────────────────────────
+#   VM:    shared-cpu-1x 256MB  →  free up to 3 VMs on Legacy Hobby plan
+#                                 or ~$2/month on Pay-as-you-go ($5 trial)
+#   Redis: Upstash Free tier    →  $0/month  (256MB data, 500K cmd/mo)
+#   Total: ~$0–2/month + $0 for Redis
+#
+# ⚠️  256MB is tight for Chromium (dynamic scraping). Static/Colly-only
+#      is fine.  If you hit OOMs on dynamic pages, run:
+#        fly scale vm shared-cpu-1x --memory 512
+#      (still under $5 waiver if on Legacy Hobby)
+#
+# Quick start:
+#   1. fly launch --no-deploy   (creates the app on Fly.io)
+#   2. fly redis create         (creates Upstash Redis — choose free tier)
+#   3. fly secrets set REDIS_URL="..." API_KEY="..." BRAVE_SEARCH_API_KEY="..."
+#   4. fly deploy
+
+app = "cinder"
+
+primary_region = "iad"
+
+# ── Build ───────────────────────────────────────────────────────────
+[build]
+  dockerfile = "Dockerfile"
+
+# ── HTTP service ────────────────────────────────────────────────────
+[http_service]
+  internal_port = 8080
+  force_https   = true
+  # Machine auto-stops when idle → no Redis commands → stays inside
+  # the 500K/mo free tier.  A machine running 24/7 would exceed it.
+  auto_stop_machines  = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+# ── Environment ─────────────────────────────────────────────────────
+[env]
+  SERVER_PORT = "8080"
+  GIN_MODE    = "release"
+  LOG_LEVEL   = "info"
+  # Redis — set secrets instead of plain env for the actual values
+  #   fly secrets set UPSTASH_REDIS_REST_URL="https://..."
+  #   fly secrets set UPSTASH_REDIS_REST_TOKEN="..."
+  # Or if using a standard Redis URL:
+  #   fly secrets set REDIS_URL="rediss://..."
+
+# ── Resource sizing ─────────────────────────────────────────────────
+[[vm]]
+  cpu_kind   = "shared"
+  cpus       = 1
+  memory_mb  = 256

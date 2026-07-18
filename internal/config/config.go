@@ -33,6 +33,13 @@ type RedisConfig struct {
 	Host     string `mapstructure:"host"`
 	Port     string `mapstructure:"port"`
 	Password string `mapstructure:"password"`
+
+	// Upstash REST API credentials.
+	// When set (and REDIS_URL is empty), the standard Redis URL is
+	// derived automatically as:
+	//   rediss://default:<RestToken>@<host-from-RestURL>:6379
+	RestURL   string `mapstructure:"rest_url"`
+	RestToken string `mapstructure:"rest_token"`
 }
 
 func Load() (*Config, error) {
@@ -53,12 +60,15 @@ func Load() (*Config, error) {
 	v.SetDefault("redis.url", "")
 	v.SetDefault("redis.host", "")
 	v.SetDefault("redis.port", "")
-	v.SetDefault("redis.port", "")
 	v.SetDefault("redis.password", "")
+	v.SetDefault("redis.rest_url", "")
+	v.SetDefault("redis.rest_token", "")
 	v.SetDefault("brave.api_key", "")
 
 	// Custom bindings
 	v.BindEnv("brave.api_key", "BRAVE_SEARCH_API_KEY")
+	v.BindEnv("redis.rest_url", "UPSTASH_REDIS_REST_URL")
+	v.BindEnv("redis.rest_token", "UPSTASH_REDIS_REST_TOKEN")
 
 	// No need for ReadInConfig since we use env vars
 
@@ -80,6 +90,18 @@ func Load() (*Config, error) {
 		} else {
 			cfg.Redis.URL = fmt.Sprintf("redis://%s", addr)
 		}
+	}
+
+	// Derive Redis URL from Upstash REST credentials (standard env vars
+	// set by Upstash console).  Only used when nothing else is set.
+	if cfg.Redis.URL == "" && cfg.Redis.RestURL != "" && cfg.Redis.RestToken != "" {
+		// UPSTASH_REDIS_REST_URL = https://<name>.upstash.io
+		host := strings.TrimPrefix(cfg.Redis.RestURL, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		// Strip trailing slash if present
+		host = strings.TrimRight(host, "/")
+		// Upstash Redis uses the same hostname and token, port 6379 with TLS
+		cfg.Redis.URL = fmt.Sprintf("rediss://default:%s@%s:6379", cfg.Redis.RestToken, host)
 	}
 
 	return &cfg, nil

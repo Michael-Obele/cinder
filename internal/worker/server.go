@@ -63,14 +63,15 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 	srv := asynq.NewServer(
 		redisOpt,
 		asynq.Config{
-			Concurrency: 10, // Increased to 10 for higher throughput on 4GB RAM
+			Concurrency: 5, // Reduced for hobby tier (256MB VM)
 			Queues: map[string]int{
 				"critical": 6,
 				"default":  3,
 				"low":      1,
 			},
-			// Check for new tasks every 1 second (Snappy response)
-			TaskCheckInterval: 1 * time.Second,
+			// 15s poll interval keeps Redis commands well within Upstash
+			// free tier (500K/mo): ~172K checks/mo vs 2.6M at 1s.
+			TaskCheckInterval: 15 * time.Second,
 			Logger:            &AsynqLogger{logger: logger},
 		},
 	)
