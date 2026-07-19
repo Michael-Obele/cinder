@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/crawl": {
             "post": {
-                "description": "Submits a URL to be crawled asynchronously using the background worker queue. Requires Redis.",
+                "description": "Submits a URL to be crawled asynchronously. The crawler performs BFS link-following up to maxDepth, scraping up to limit pages on the same domain. Requires Redis.",
                 "consumes": [
                     "application/json"
                 ],
@@ -498,6 +498,12 @@ const docTemplate = `{
                 "images": {
                     "type": "boolean"
                 },
+                "limit": {
+                    "type": "integer"
+                },
+                "maxDepth": {
+                    "type": "integer"
+                },
                 "render": {
                     "type": "boolean"
                 },
@@ -517,6 +523,12 @@ const docTemplate = `{
                 },
                 "images": {
                     "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "maxDepth": {
+                    "type": "integer"
                 },
                 "render": {
                     "type": "boolean"

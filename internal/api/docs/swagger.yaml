@@ -65,6 +65,10 @@ definitions:
     properties:
       images:
         type: boolean
+      limit:
+        type: integer
+      maxDepth:
+        type: integer
       render:
         type: boolean
       screenshot:
@@ -80,6 +84,10 @@ definitions:
         type: string
       images:
         type: boolean
+      limit:
+        type: integer
+      maxDepth:
+        type: integer
       render:
         type: boolean
       screenshot:
@@ -171,8 +179,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Submits a URL to be crawled asynchronously using the background
-        worker queue. Requires Redis.
+      description: Submits a URL to be crawled asynchronously. The crawler performs
+        BFS link-following up to maxDepth, scraping up to limit pages on the same
+        domain. Requires Redis.
       parameters:
       - description: JSON request body
         in: body
