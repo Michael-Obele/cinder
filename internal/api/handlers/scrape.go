@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/standard-user/cinder/internal/domain"
@@ -23,6 +24,24 @@ type ScrapeHandler struct {
 
 func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
 	return &ScrapeHandler{service: s}
+}
+
+// wordCount returns the number of whitespace-delimited words in the given text.
+func wordCount(text string) int {
+	if text == "" {
+		return 0
+	}
+	count := 0
+	inWord := false
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			inWord = false
+		} else if !inWord {
+			count++
+			inWord = true
+		}
+	}
+	return count
 }
 
 // Scrape godoc
@@ -95,5 +114,20 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	// Extract title and word count for the summary
+	title := ""
+	if result.Markdown != "" {
+		title = extractTitle(result.Markdown)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":        result.URL,
+		"title":      title,
+		"word_count": wordCount(result.Markdown),
+		"markdown":   result.Markdown,
+		"html":       result.HTML,
+		"metadata":   result.Metadata,
+		"screenshot": result.Screenshot,
+		"images":     result.Images,
+	})
 }

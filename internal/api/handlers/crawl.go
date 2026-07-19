@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -153,13 +155,96 @@ func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":        info.ID,
-		"queue":     info.Queue,
-		"state":     info.State.String(),
-		"max_retry": info.MaxRetry,
-		"retried":   info.Retried,
-		"payload":   string(info.Payload),
-		"result":    string(info.Result),
-	})
+	// Build response with task metadata
+	resp := gin.H{
+		"id":    info.ID,
+		"queue": info.Queue,
+		"state": taskStateLabel(info.State),
+	}
+
+	// Parse and format the result when the task has completed
+	if info.State == asynq.TaskStateCompleted && len(info.Result) > 0 {
+		var crawlResult worker.CrawlResult
+		if err := json.Unmarshal(info.Result, &crawlResult); err == nil {
+			// Build a clean pages list with titles and previews
+			type pageEntry struct {
+				URL     string `json:"url"`
+				Title   string `json:"title,omitempty"`
+				Preview string `json:"preview,omitempty"`
+			}
+			pages := make([]pageEntry, 0, len(crawlResult.Pages))
+			for _, p := range crawlResult.Pages {
+				pages = append(pages, pageEntry{
+					URL:     p.URL,
+					Title:   extractTitle(p.Markdown),
+					Preview: extractPreview(p.Markdown, 300),
+				})
+			}
+
+			resp["crawl"] = gin.H{
+				"status":      crawlResult.Status,
+				"total_pages": crawlResult.TotalPages,
+				"max_depth":   crawlResult.MaxDepth,
+				"limit":       crawlResult.Limit,
+				"pages":       pages,
+			}
+			if len(crawlResult.FailedURLs) > 0 {
+				resp["failed_urls"] = crawlResult.FailedURLs
+			}
+		} else {
+			// Fallback: return raw result if parsing fails
+			resp["result"] = string(info.Result)
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// taskStateLabel returns a human-readable state label for an Asynq task.
+func taskStateLabel(s asynq.TaskState) string {
+	switch s {
+	case asynq.TaskStateActive:
+		return "active"
+	case asynq.TaskStatePending:
+		return "pending"
+	case asynq.TaskStateScheduled:
+		return "scheduled"
+	case asynq.TaskStateRetry:
+		return "retry"
+	case asynq.TaskStateArchived:
+		return "archived"
+	case asynq.TaskStateCompleted:
+		return "completed"
+	default:
+		return s.String()
+	}
+}
+
+// extractTitle returns the first H1 heading from markdown content.
+func extractTitle(markdown string) string {
+	for _, line := range strings.Split(markdown, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			return strings.TrimPrefix(trimmed, "# ")
+		}
+	}
+	return ""
+}
+
+// extractPreview returns the first N characters of clean markdown content.
+func extractPreview(markdown string, maxLen int) string {
+	cleaned := strings.TrimSpace(markdown)
+	runes := []rune(cleaned)
+	if len(runes) <= maxLen {
+		return cleaned
+	}
+	// Cut at the last space before maxLen to avoid word-splitting
+	cut := maxLen
+	for cut > maxLen-50 && cut < len(runes) && runes[cut] != ' ' {
+		cut--
+	}
+	if cut <= maxLen-50 {
+		cut = maxLen
+	}
+	return string(runes[:cut]) + "..."
 }
