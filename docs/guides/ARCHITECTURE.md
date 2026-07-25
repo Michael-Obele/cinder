@@ -41,20 +41,32 @@ Cinder is a Go-based distributed scraper (a lightweight alternative to Firecrawl
 Equivalent to a standard `await`ed API call in SvelteKit.
 
 1. `router.go` receives the request.
-2. `handlers/scrape.go` validates the input.
-3. `scraper/service.go` (The Orchestrator) decides: "Static or Dynamic?"
-4. `colly.go` or `chromedp.go` performs the work.
-5. Result is returned directly to the user.
+2. `handlers/scrape.go` validates the input (url required, optional screenshot/images flags).
+3. `scraper/service.go` (The Orchestrator) decides:
+   - **Static** → `colly.go` (fast, like Cheerio)
+   - **Dynamic** → `chromedp.go` (headless Chrome, like Puppeteer)
+   - **Smart (default)** → Try static first, run `heuristics.go` to check if the HTML is an SPA shell, fall back to dynamic if needed
+4. If `screenshot: true`, dynamic mode is forced and a full-page JPEG is captured.
+5. If `images: true`, `extractor.go` parses `<img>` tags, and `processor.go` downloads + base64-encodes them.
+6. Result is gzip-compressed and cached in Redis for 7 days, then returned.
 
-### 2. Asynchronous Crawl (`POST /v1/crawl`)
+### 2. Web Search (`POST /v1/search`)
+
+Like a SvelteKit `+server.ts` that proxies an external API.
+
+1. `handlers/search.go` validates the query.
+2. `search/service.go` calls the **Brave Search API** with rate limiting (1 req / 1.1s).
+3. Filters, paginates, and returns results with relevance scoring.
+
+### 3. Asynchronous Crawl (`POST /v1/crawl`)
 
 Equivalent to pushing a job to **BullMQ** and returning a Job ID.
 
-1. `handlers/crawl.go` enqueues a task to **Redis**.
+1. `handlers/crawl.go` enqueues a task to **Redis** via Asynq.
 2. API returns an `id` immediately (HTTP 202 Accepted).
-3. The **Worker** (`cmd/worker`) sees the task in Redis.
-4. `worker/handlers.go` takes the task and runs its logic.
-5. The result can be inspected later via the ID.
+3. The **Worker** (embedded in the API process in monolith mode, or standalone `cmd/worker/main.go`) picks up the task.
+4. `worker/crawl_handler.go` performs a **BFS crawl**: scrapes the seed URL, extracts links, follows same-domain links up to `maxDepth`.
+5. Results are stored in Asynq's result backend — poll `GET /v1/crawl/:id` to check status.
 
 ---
 
@@ -66,7 +78,22 @@ In Go, we "wire up" our code in `main.go`. We create the Scrapers first, then pa
 
 ### Interface-Based Design
 
-Look at `internal/domain/scraper.go`. It defines what a "Scraper" is. Because of this, we can easily swap Colly for Chromedp or even add a third "AI Scraper" later without changing the API logic.
+Look at `internal/domain/scraper.go`. It defines what a "Scraper" is:
+
+```go
+type Scraper interface {
+    Scrape(ctx context.Context, url string, opts ScrapeOptions) (*ScrapeResult, error)
+}
+```
+
+Because of this, we can easily swap Colly for Chromedp, or add a third "AI Scraper" without changing the API logic. This is like Svelte's `interface` pattern — as long as the component accepts the same props, you can swap implementations.
+
+### Smart Heuristics (`internal/scraper/heuristics.go`)
+
+The "smart" mode isn't magic — it's a plain function that analyzes HTML. Think of it like SvelteKit's `server-side rendering check`: if the static HTML we got back looks like an empty SPA shell (just `<div id="root">` with `<script>` tags), we know we need the headless browser. It checks:
+- `<noscript>` "enable JavaScript" messages
+- Framework-specific root elements (`id="__next"`, `data-reactroot`, `<app-root>`, etc.)
+- Tiny HTML + lots of `<script>` tags (likely JS-only shell)
 
 ---
 
@@ -77,9 +104,10 @@ Look at `internal/domain/scraper.go`. It defines what a "Scraper" is. Because of
 Before you start, you'll need:
 
 - **Go 1.22+**: Download from [golang.org](https://golang.org/dl/)
-- **Redis**: For the async task queue
+- **Redis**: For the async task queue and caching
   - Local: Install Redis server (`brew install redis` on macOS, `apt install redis-server` on Ubuntu)
-  - Or use a cloud Redis like Upstash/Leapcell Redis
+  - Or use Upstash free tier (set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` in `.env` — the app auto-derives the TLS Redis URL)
+- **Brave Search API Key** (optional): For the `/v1/search` endpoint. Get one at [brave.com/search/api/](https://brave.com/search/api/)
 - **Git**: For cloning and version control
 
 ### Environment Setup

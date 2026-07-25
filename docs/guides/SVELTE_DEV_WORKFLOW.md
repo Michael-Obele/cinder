@@ -58,12 +58,13 @@ export const load: PageServerLoad = async ({ fetch }) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       url: "https://example.com",
-      mode: "smart", // 'static', 'dynamic', or 'smart'
+      mode: "smart",            // 'static', 'dynamic', or 'smart'
+      screenshot: false,        // Set true to get a base64 screenshot blob
+      images: false,            // Set true to extract page images as base64
     }),
   });
 
   if (!response.ok) {
-    // Handle Go error responses
     const errorData = await response.json();
     console.error("Cinder API Error:", errorData);
     return { error: "Failed to scrape" };
@@ -71,19 +72,64 @@ export const load: PageServerLoad = async ({ fetch }) => {
 
   const data = await response.json();
 
-  // 2. Pass the Markdown/HTML to the Svelte component
+  // 2. Pass the Markdown/HTML + optional media to the Svelte component
   return {
     markdown: data.markdown,
     metadata: data.metadata,
+    screenshot: data.screenshot, // { blob, format, width, height, full_page }
+    images: data.images,         // [{ url, blob, alt, width, height, source }]
   };
 };
 ```
+
+### Example: Calling the Search API from SvelteKit
+
+```typescript
+// src/routes/search/+page.server.ts
+import type { PageServerLoad } from "./$types";
+
+export const load: PageServerLoad = async ({ fetch, url }) => {
+  const query = url.searchParams.get("q") || "svelte 5 runes";
+
+  const response = await fetch(`http://localhost:8080/v1/search?q=${encodeURIComponent(query)}&limit=10`);
+
+  if (!response.ok) {
+    return { error: "Search failed", results: [] };
+  }
+
+  const data = await response.json();
+
+  return {
+    query: data.query,
+    results: data.results,       // [{ title, url, description, domain, relevance }]
+    hasMore: data.hasMore,
+    nextOffset: data.nextOffset,  // Pass this back for "load more"
+  };
+};
+```
+
+> **🔍 Search requires a `BRAVE_SEARCH_API_KEY`** environment variable. Sign up at [Brave Search API](https://brave.com/search/api/).
 
 ---
 
 ## 🧪 3. How to Test
 
 You live in two worlds: the Go backend and the JS/Svelte frontend.
+
+### Quality Checks (`make check` — like `npm run check`)
+
+The project has a `Makefile` that bundles all quality checks into one command:
+
+```bash
+# Run everything: format + lint + static analysis + tests
+make check
+
+# Or run individually:
+make fmt          # go fmt (like Prettier for Go)
+make vet          # go vet  (like basic ESLint)
+make staticcheck  # staticcheck (like advanced ESLint — install with: go install honnef.co/go/tools/cmd/staticcheck@latest)
+make test         # go test -v (like Vitest)
+```
 
 ### Testing the Go Backend
 
@@ -98,12 +144,20 @@ go test ./... -count=1 -v
 
 # Run a specific test suite (e.g., scraper package)
 go test ./internal/scraper/... -v
+
+# Run with race detection (critical for concurrent code)
+go test -race ./...
+
+# Run with coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
 ```
 
 **Mental mapping:**
 
 - `describe()` / `it()` -> `func TestSomething(t *testing.T) { t.Run(...) }`
 - `expect(x).toBe(y)` -> `if x != y { t.Errorf(...) }`
+- The test file sits right next to the code: `scrape.go` → `scrape_test.go`
 
 _For more in-depth testing setup, check out the [Testing Guide](TESTING.md)._
 
@@ -168,8 +222,22 @@ logger.Log.Error("Something broke", "error", err)
 
 Make sure your server is running with `LOG_LEVEL=debug` if you are using `logger.Log.Debug()`.
 
+### Upstash Redis (Free Tier Friendly)
+
+You don't need a local Redis server. Cinder can auto-configure Upstash Redis from the standard env vars:
+
+```bash
+# In your .env file — just paste from Upstash console:
+UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_token_here
+```
+
+The app automatically derives `rediss://default:token@host:6379` from these. This means zero-config Redis on free-tier Upstash.
+
 ### Common Gotchas
 
 - **CORS Errors**: If your SvelteKit frontend (running in the browser) tries to call `localhost:8080/v1/scrape` directly via a client-side `fetch()`, you might get CORS errors. **Always proxy requests through your SvelteKit `+server.ts` endpoints or use `+page.server.ts`** to make server-to-server calls.
 - **Port Conflicts**: If `localhost:8080` is taken, set `PORT=8081` in your `.env` file for the Go backend.
 - **Nil Pointers**: The equivalent of "Cannot read properties of undefined". If Go panics with "invalid memory address or nil pointer dereference", look for a variable that is a pointer (has a `*` in its type) that was never initialized.
+- **Worker in debug**: The embedded worker (monolith mode) polls Redis every 15s. Be patient after enqueuing a crawl job — it can take 15s to be picked up. Set `DISABLE_WORKER=true` to turn it off if you only need the synchronous scrape API.
+- **Swagger auto-gen**: In `debug` mode, the server automatically regenerates Swagger docs on start. If you add a new endpoint, just restart the server and check `/swagger/index.html`.

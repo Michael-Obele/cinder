@@ -24,11 +24,13 @@ If you're new to Go, read these in order:
 | ------------------------------------------------------------- | ----------------------------------------------- |
 | [Architecture Guide](ARCHITECTURE.md)                         | High-level design and task queue patterns       |
 | [Project Tour](PROJECT_TOUR.md)                               | Visual map of the codebase for JS devs          |
+| [API Reference](API_REFERENCE.md)                             | Complete endpoint docs (scrape, search, crawl)  |
 | [Performance Changes](CHANGELOG_JS.md)                        | How the browser context pool optimization works |
 | [Testing Guide](TESTING.md)                                   | How to run and write Go tests                   |
 | **Features Explorer**                                         |                                                 |
-| [Screenshot Feature](../features/image-screenshot-feature.md) | Capturing page screenshots                      |
-| [Image Blob Transport](../features/image-blob-transport.md)   | AI-ready image pipeline                         |
+| [Search](../search/service.go)                                | Brave Search API integration (rate-limited)     |
+| [Screenshot & Images](../features/image-screenshot-feature.md)| Capturing page screenshots and images           |
+| [Image Blob Transport](../features/image-blob-transport.md)   | AI-ready image pipeline (base64 data URIs)      |
 
 ---
 
@@ -132,16 +134,19 @@ cinder/
 
 ## Key Concepts Map
 
-| SvelteKit Concept   | Go Equivalent     | Cinder Location              |
-| ------------------- | ----------------- | ---------------------------- |
-| `+page.server.ts`   | Handler function  | `internal/api/handlers/*.go` |
-| `hooks.server.ts`   | Middleware        | `internal/api/middleware/`   |
-| Route group `(api)` | Router group      | `v1 := r.Group("/v1")`       |
-| `$lib`              | `internal/`       | `internal/*`                 |
-| `types.ts`          | Domain package    | `internal/domain/`           |
-| Environment vars    | Viper config      | `internal/config/`           |
-| `package.json`      | `go.mod`          | Project root                 |
-| `npm install`       | `go mod download` | —                            |
+| SvelteKit Concept              | Go Equivalent              | Cinder Location                |
+| ------------------------------ | --------------------------- | ------------------------------ |
+| `+page.server.ts`              | Handler function            | `internal/api/handlers/*.go`  |
+| `hooks.server.ts`              | Middleware                  | `internal/api/middleware/`     |
+| Route group `(api)`            | Router group                | `v1 := r.Group("/v1")`         |
+| `$lib`                         | `internal/`                 | `internal/*`                   |
+| `types.ts`                     | Domain package              | `internal/domain/`             |
+| Environment vars               | Viper config                | `internal/config/`             |
+| `package.json`                 | `go.mod`                    | Project root                   |
+| `npm run check`                | `make check`                | Project root (Makefile)        |
+| `npm install`                  | `go mod download`           | —                              |
+| External API proxy in server   | Search service              | `internal/search/service.go`   |
+| File upload / base64 pipeline  | Image processor             | `internal/image/processor.go`  |
 
 ---
 

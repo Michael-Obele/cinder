@@ -3,9 +3,9 @@
 > Detailed plan for capturing, encoding, and transporting images as self-contained blobs that can be directly fed into multimodal AI APIs (OpenAI GPT-4o, Google Gemini, Anthropic Claude, etc.).
 > See [Documentation Index](../guides/INDEX.md) for core guides.
 
-**Status**: Planning Phase — Ready for Implementation  
-**Last Updated**: February 26, 2026  
-**Related**: [image-screenshot-feature.md](./image-screenshot-feature.md) (higher-level overview)
+**Status**: ✅ **Partially Implemented**  
+**Last Updated**: July 25, 2026  
+**Related**: [image-screenshot-feature.md](./image-screenshot-feature.md)
 
 ---
 
@@ -49,7 +49,7 @@ Every image in the response can be delivered in two modes:
 
 The consumer chooses via a request parameter. Default is `url` (backward-compatible, zero overhead).
 
-### System Flow
+### System Flow (Current Implementation)
 
 ```
 Client Request                         Response
@@ -57,25 +57,26 @@ Client Request                         Response
 POST /v1/scrape                        {
   url: "...",                            url: "...",
   screenshot: true,        ──────►       markdown: "...",
-  extract_images: true,                  screenshot: {
-  image_format: "blob"                     blob: "data:image/webp;base64,...",
+  images: true,                          screenshot: {
+  image_format: "blob"                     blob: "data:image/jpeg;base64,...",
 }                                          width: 1280,
                                            height: 800,
-                                           format: "webp",
+                                           format: "jpeg",
                                            size_bytes: 42100
                                          },
                                          images: [
                                            {
-                                             blob: "data:image/jpeg;base64,...",
+                                             blob: "data:image/png;base64,...",
                                              alt: "Hero banner",
                                              width: 800,
                                              height: 400,
-                                             format: "jpeg",
                                              source: "og:image"
                                            }
                                          ]
                                        }
 ```
+
+> ⚠️ **Current state:** Screenshots are fully implemented in `chromedp.go`. The image extraction pipeline (`internal/image/extractor.go` + `processor.go`) exists but is **not yet wired into the scrape service flow** — the `Images` flag is accepted by the API but image extraction from HTML is pending connection in the service layer. Screenshots work end-to-end.
 
 ### Architecture Diagram
 
@@ -188,7 +189,7 @@ const (
 )
 ```
 
-### 3.2 Updated: `internal/domain/scraper.go`
+### 3.2 Current: `internal/domain/scraper.go`
 
 ```go
 type ScrapeResult struct {
@@ -197,36 +198,34 @@ type ScrapeResult struct {
     HTML       string            `json:"html,omitempty"`
     Metadata   map[string]string `json:"metadata,omitempty"`
 
-    // New image fields (omitted when not requested)
+    // Image fields (omitted when not requested)
     Screenshot *ScreenshotData   `json:"screenshot,omitempty"`
     Images     []ImageData       `json:"images,omitempty"`
 }
 
-// ScrapeOptions extends scraping with image capabilities.
+// ScrapeOptions — current as-implemented
 type ScrapeOptions struct {
-    Mode            string               // "static", "dynamic", "smart"
-    Screenshot      bool                 // Capture screenshot
-    ExtractImages   bool                 // Extract images from page
-    ImageFormat     ImageTransportFormat // "url" or "blob"
-    ScreenshotOpts  *ScreenshotOptions   // Screenshot configuration
-    MaxImages       int                  // Max images to extract (default: 10)
-    MaxImageSizeKB  int                  // Max individual image size to fetch for blob (default: 2048)
+    Mode           string               `json:"mode,omitempty"`
+    Screenshot     bool                 `json:"screenshot"`
+    Images         bool                 `json:"images"`
+    ImageFormat    ImageTransportFormat `json:"image_format,omitempty"`
+    ScreenshotOpts *ScreenshotOptions   `json:"screenshot_opts,omitempty"`
+    MaxImages      int                  `json:"max_images,omitempty"`
+    MaxImageSizeKB int                  `json:"max_image_size_kb,omitempty"`
 }
 ```
 
-### 3.3 Updated: API Request/Response
+### 3.3 Current API Request (`internal/api/handlers/scrape.go`)
 
 ```go
-// ScrapeRequest (handlers/scrape.go)
 type ScrapeRequest struct {
-    URL           string `json:"url" binding:"required,url"`
-    Mode          string `json:"mode"`
-    Render        bool   `json:"render"`          // Deprecated
-
-    // New image parameters
-    Screenshot    bool   `json:"screenshot"`       // Capture screenshot
-    ExtractImages bool   `json:"extract_images"`   // Extract page images
-    ImageFormat   string `json:"image_format"`     // "url" (default) or "blob"
+    URL        string `json:"url" binding:"required,url"`
+    Render     bool   `json:"render"`          // Deprecated
+    Mode       string `json:"mode"`
+    Screenshot bool   `json:"screenshot"`
+    Images     bool   `json:"images"`
+    // Note: image_format, max_images, max_image_size_kb are defined
+    // in ScrapeOptions but not yet exposed in the request handler
 }
 ```
 

@@ -21,13 +21,16 @@ Scrapes a given URL and returns its markdown content, metadata, and optionally c
 
 You can send parameters as a JSON body (for `POST`) or as query string parameters (for both `GET` and `POST`).
 
-| Parameter    | Type    | Required | Default | Description                                                                                                       |
-| ------------ | ------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
-| `url`        | string  | **Yes**  | -       | The full URL of the webpage to scrape.                                                                            |
-| `mode`       | string  | No       | `smart` | Scraping mode: `smart`, `static`, or `dynamic`.                                                                   |
-| `screenshot` | boolean | No       | `false` | Capture full-page screenshot (requires mode `dynamic` or `smart`). Return payload includes base64 representation. |
-| `images`     | boolean | No       | `false` | Extract images as base64 blobs from the document.                                                                 |
-| `render`     | boolean | No       | `false` | *Deprecated*. Behaves the same as `mode=dynamic`.                                                                 |
+| Parameter        | Type    | Required | Default | Description                                                                                                       |
+| ---------------- | ------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `url`            | string  | **Yes**  | -       | The full URL of the webpage to scrape.                                                                            |
+| `mode`           | string  | No       | `smart` | Scraping mode: `smart`, `static`, or `dynamic`.                                                                   |
+| `screenshot`     | boolean | No       | `false` | Capture full-page screenshot (requires mode `dynamic` or `smart`). Returns base64 JPEG blob.                     |
+| `images`         | boolean | No       | `false` | Extract images as base64 blobs from the document.                                                                 |
+| `image_format`   | string  | No       | `url`   | Image transport format: `"url"` (metadata only) or `"blob"` (base64-encoded).                                     |
+| `max_images`     | int     | No       | `10`    | Maximum number of images to extract.                                                                              |
+| `max_image_size_kb` | int  | No       | `5120`  | Maximum image file size in KB (default 5MB).                                                                      |
+| `render`         | boolean | No       | `false` | *Deprecated*. Behaves the same as `mode=dynamic`.                                                                 |
 
 ### Example Request (`POST`)
 ```bash
@@ -71,15 +74,16 @@ Searches the web using the configured search provider (Brave Search) and returns
 
 ### Request Parameters
 
-| Parameter        | Type          | Required | Default | Description                                                   |
-| ---------------- | ------------- | -------- | ------- | ------------------------------------------------------------- |
-| `query` or `q`   | string        | **Yes**  | -       | The search query.                                             |
-| `offset`         | int           | No       | `0`     | Pagination offset.                                            |
-| `limit`          | int           | No       | `10`    | Pagination limit (Maximum: 100).                              |
-| `includeDomains` | array[string] | No       | -       | Restrict results to these domains (e.g. `["wikipedia.org"]`). |
-| `excludeDomains` | array[string] | No       | -       | Exclude results from these domains.                           |
-| `requiredText`   | array[string] | No       | -       | Filter results containing this text.                          |
-| `maxAge`         | int           | No       | -       | Max age of the result in days.                                |
+| Parameter        | Type          | Required | Default | Description                                                              |
+| ---------------- | ------------- | -------- | ------- | ------------------------------------------------------------------------ |
+| `query` or `q`   | string        | **Yes**  | -       | The search query.                                                        |
+| `offset`         | int           | No       | `0`     | Pagination offset.                                                       |
+| `limit`          | int           | No       | `10`    | Pagination limit (Maximum: 100).                                         |
+| `mode`           | string        | No       | -       | Search speed: `"fast"` restricts to recent results (last day).            |
+| `includeDomains` | array[string] | No       | -       | Restrict results to these domains (e.g. `["wikipedia.org"]`).            |
+| `excludeDomains` | array[string] | No       | -       | Exclude results from these domains.                                      |
+| `requiredText`   | array[string] | No       | -       | Filter results containing this text.                                     |
+| `maxAge`         | int           | No       | -       | Max age in days: `1` (day), `7` (week), `30` (month).                    |
 
 ### Example Request (`POST`)
 ```bash
@@ -122,14 +126,15 @@ Submits a seed URL to be crawled asynchronously using the background worker queu
 ### Request Parameters
 Accepts a JSON body with scraping parameters and crawl-specific options.
 
-| Parameter    | Type    | Required | Default | Description                                                     |
-| ------------ | ------- | -------- | ------- | --------------------------------------------------------------- |
-| `url`        | string  | **Yes**  | -       | The seed URL to start crawling from.                            |
-| `maxDepth`   | int     | No       | `2`     | Maximum link-following depth from the seed URL. Capped at `10`. |
-| `limit`      | int     | No       | `10`    | Maximum total number of pages to scrape. Capped at `100`.       |
-| `render`     | boolean | No       | `false` | Render JavaScript for each page (uses headless browser).        |
-| `screenshot` | boolean | No       | `false` | Capture screenshots for each scraped page.                      |
-| `images`     | boolean | No       | `false` | Extract images from each scraped page.                          |
+| Parameter    | Type    | Required | Default | Description                                                       |
+| ------------ | ------- | -------- | ------- | ----------------------------------------------------------------- |
+| `url`        | string  | **Yes**  | -       | The seed URL to start crawling from.                              |
+| `mode`       | string  | No       | `smart` | Scraping mode: `smart`, `static`, or `dynamic`.                   |
+| `maxDepth`   | int     | No       | `2`     | Maximum link-following depth from the seed URL. Capped at `10`.   |
+| `limit`      | int     | No       | `10`    | Maximum total number of pages to scrape. Capped at `100`.         |
+| `render`     | boolean | No       | `false` | Render JavaScript for each page (uses headless browser).          |
+| `screenshot` | boolean | No       | `false` | Capture screenshots for each scraped page.                        |
+| `images`     | boolean | No       | `false` | Extract images from each scraped page.                            |
 
 ### Crawl Behavior
 - **Domain-locked**: The crawler only follows links on the same hostname as the seed URL.
@@ -180,38 +185,50 @@ curl http://localhost:8080/v1/crawl/e8a932c0-82af-4a11-bd4a-6f17e29b1111
 {
   "id": "e8a932c0-82af-4a11-bd4a-6f17e29b1111",
   "queue": "default",
-  "state": "active",
-  "max_retry": 2,
-  "retried": 0,
-  "payload": "{\"url\":\"https://docs.example.com\",\"maxDepth\":3,\"limit\":20}",
-  "result": ""
+  "state": "active"
 }
 ```
 
+> **Note:** The API now returns a cleaned-up response. Fields like `payload`, `max_retry`, `retried`, and raw `result` are no longer exposed — instead, the parsed crawl data is presented in a structured format when the task completes.
+
 ### Example Response (Completed)
-When the crawl finishes, `state` becomes `"completed"` and `result` contains a JSON string with the full crawl output:
+When the crawl finishes, `state` becomes `"completed"` and a structured `crawl` object appears:
 ```json
 {
   "id": "e8a932c0-82af-4a11-bd4a-6f17e29b1111",
   "queue": "default",
   "state": "completed",
-  "max_retry": 2,
-  "retried": 0,
-  "payload": "...",
-  "result": "{\"status\":\"completed\",\"total\":5,\"maxDepth\":3,\"limit\":20,\"data\":[{\"url\":\"https://docs.example.com\",\"markdown\":\"...\",\"metadata\":{...}}, ...]}"
+  "crawl": {
+    "status": "completed",
+    "total_pages": 5,
+    "max_depth": 3,
+    "limit": 20,
+    "pages": [
+      {
+        "url": "https://docs.example.com",
+        "title": "Example Docs",
+        "preview": "This is the first 300 characters of the page markdown..."
+      }
+    ]
+  },
+  "failed_urls": [
+    { "url": "https://docs.example.com/404", "error": "scraping failed: ..." }
+  ]
 }
 ```
 
-The `result` field, when parsed, has the following structure:
+The `crawl` object contains:
 
-| Field        | Type             | Description                                                            |
-| ------------ | ---------------- | ---------------------------------------------------------------------- |
-| `status`     | string           | `"completed"`, `"partial"` (some pages failed), `"failed"`             |
-| `total`      | int              | Total pages successfully scraped.                                      |
-| `maxDepth`   | int              | The maxDepth that was used.                                            |
-| `limit`      | int              | The limit that was used.                                               |
-| `data`       | array            | Array of `ScrapeResult` objects (same shape as `/v1/scrape` response). |
-| `failedUrls` | array (optional) | URLs that failed to scrape, with error messages.                       |
+| Field         | Type             | Description                                                     |
+| ------------- | ---------------- | --------------------------------------------------------------- |
+| `status`      | string           | `"completed"`, `"partial"` (some pages failed), `"failed"`, `"cancelled"` |
+| `total_pages` | int              | Total pages successfully scraped.                               |
+| `max_depth`   | int              | The maxDepth that was used.                                     |
+| `limit`       | int              | The limit that was used.                                        |
+| `pages`       | array            | Scraped pages with `url`, `title`, `preview` (first 300 chars). |
+| `failed_urls` | array (optional) | URLs that failed to scrape, with error messages.                |
+
+> **Frontend poll pattern**: In your SvelteKit app, poll `GET /v1/crawl/:id` every 5s until `state` is `"completed"` or `"failed"`. Display the `pages` array as a list of scraped URLs with their titles and previews.
 
 ---
 

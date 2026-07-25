@@ -315,42 +315,25 @@ func TestResultJSON_OmitEmptyImages(t *testing.T) {
 
 ---
 
-## 7. Configuration
+## 4. Configuration
 
-### Environment Variables
+Image features are controlled per-request via API parameters — there are no dedicated env vars for enabling/disabling them globally.
 
-```bash
-# Enable image features
-CINDER_ENABLE_IMAGES=true
-CINDER_ENABLE_SCREENSHOTS=true
+| API Parameter    | Type    | Default | Description                                    |
+| ---------------- | ------- | ------- | ---------------------------------------------- |
+| `screenshot`     | boolean | `false` | Capture full-page base64 JPEG screenshot       |
+| `images`         | boolean | `false` | Extract images from the page                   |
+| `image_format`   | string  | `"url"` | `"url"` (metadata) or `"blob"` (base64 data URI) |
+| `max_images`     | int     | `10`    | Maximum images to extract                      |
+| `max_image_size_kb` | int  | `5120`  | Max individual image size (5MB default)        |
 
-# Chrome settings
-CINDER_CHROME_EXECUTABLE=/usr/bin/chromium
-CINDER_CHROME_POOL_SIZE=3
-CINDER_CHROME_TIMEOUT=30s
+Hardcoded limits in `internal/image/processor.go`:
 
-# Image settings
-CINDER_IMAGE_CACHE_SIZE=100
-CINDER_IMAGE_CACHE_TTL=1h
-CINDER_MAX_IMAGE_SIZE=5MB
-```
+- `MaxImageSize = 5 * 1024 * 1024` (5MB per image)
+- `FetchTimeout = 10 * time.Second`
+- `DefaultQuality = 80` (JPEG/WebP)
 
-### Configuration Struct
-
-**File:** `internal/config/config.go`
-
-```go
-type ImageConfig struct {
-    EnableImages       bool
-    EnableScreenshots  bool
-    MaxImageSize       int64
-    CacheSize          int
-    CacheTTL           time.Duration
-    ScreenshotTimeout  time.Duration
-    ChromePoolSize     int
-    ChromeExecutable   string
-}
-```
+> The image pipeline does not write to disk — everything stays in memory and is passed as base64 data URIs in the JSON response.
 
 ---
 
@@ -401,29 +384,30 @@ results, _, err := s.Search(ctx, SearchOptions{Query: "golang"})
 
 ---
 
-## 9. Implementation Checklist
+## ✅ Implementation Status
 
-### Phase 1: Domain & Foundation
+All phases have been implemented. Here's the current state:
 
-- [ ] Create `internal/domain/media.go` (Structs)
-- [ ] Update `internal/domain/scraper.go` (`ScrapeResult`, `ScrapeOptions`)
-- [ ] Create `internal/image` package (Processor logic)
+### ✅ Phase 1: Domain & Foundation (DONE)
 
-### Phase 2: Scraper Implementation
+- `internal/domain/media.go` — Contains `ImageData`, `ScreenshotData`, `BlobData`, `ScreenshotOptions`, `ImageTransportFormat`
+- `internal/domain/scraper.go` — `ScrapeResult` has `Screenshot` and `Images` fields; `ScrapeOptions` has all imaging flags
 
-- [ ] Update `internal/scraper/chromedp.go`: Add screenshot capture
-- [ ] Update `internal/scraper/colly.go`: Add image extraction
-- [ ] Update `internal/scraper/service.go`: Wire options to specific scrapers
+### ✅ Phase 2: Scraper Implementation (DONE)
 
-### Phase 3: Search Integration (Optional)
+- `internal/scraper/chromedp.go` — Captures full-page base64 JPEG screenshots when `opts.Screenshot` is true
+- `internal/scraper/colly.go` — Image extraction deferred to `internal/image/extractor.go`
+- `internal/scraper/service.go` — Passes `ScrapeOptions` through; forces dynamic mode when screenshot is requested
 
-- [ ] Update `internal/search/service.go`: Extend `Result` struct
-- [ ] Implement logic to enrich search results via Scraper (if needed)
+### 🟡 Phase 3: Search Integration (NOT STARTED)
 
-### Phase 4: Infrastructure
+Image enrichment for search results has not been implemented — search is currently text-only.
 
-- [ ] Add configuration for screenshot size/quality
-- [ ] Update Dockerfile/Setup for Chrome dependencies (if not already present)
+### ✅ Phase 4: Infrastructure (DONE)
+
+- Size limits enforced in `internal/image/processor.go` (5MB per image, 10s fetch timeout)
+- Dockerfile already includes Chromium for headless screenshots
+- `install_browser.sh` handles Chrome installation in CI/deployment
 
 ---
 
@@ -515,4 +499,4 @@ defer cancel()
 
 **Document Version:** 1.0  
 **Last Updated:** January 26, 2026  
-**Status:** Planning Phase (Ready for Implementation)
+**Status:** ✅ **Implemented** (see image-blob-transport.md for current architecture)
