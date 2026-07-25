@@ -147,10 +147,17 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 		)
 
 		// Scrape the page
-		result, scrapeErr := h.scraper.Scrape(ctx, entry.url, mode, domain.ScrapeOptions{
+		scrapeOpts := domain.ScrapeOptions{
 			Screenshot: payload.Screenshot,
 			Images:     payload.Images,
-		})
+		}
+		switch payload.ImageFormat {
+		case "blob":
+			scrapeOpts.ImageFormat = domain.ImageFormatBlob
+		case "url":
+			scrapeOpts.ImageFormat = domain.ImageFormatURL
+		}
+		result, scrapeErr := h.scraper.Scrape(ctx, entry.url, mode, scrapeOpts)
 		if scrapeErr != nil {
 			h.logger.Warn("Failed to scrape page during crawl",
 				"url", entry.url, "error", scrapeErr,

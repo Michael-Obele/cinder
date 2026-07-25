@@ -14,31 +14,34 @@ const (
 )
 
 type ScrapePayload struct {
-	URL        string `json:"url"`
-	Render     bool   `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode       string `json:"mode"`   // "smart", "static", "dynamic"
-	Screenshot bool   `json:"screenshot"`
-	Images     bool   `json:"images"`
+	URL         string `json:"url"`
+	Render      bool   `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode        string `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot  bool   `json:"screenshot"`
+	Images      bool   `json:"images"`
+	ImageFormat string `json:"image_format,omitempty"`
 }
 
 // CrawlPayload extends ScrapePayload with multi-page crawling options.
 type CrawlPayload struct {
-	URL        string `json:"url"`
-	Render     bool   `json:"render"`
-	Mode       string `json:"mode"`
-	Screenshot bool   `json:"screenshot"`
-	Images     bool   `json:"images"`
-	MaxDepth   int    `json:"maxDepth"`
-	Limit      int    `json:"limit"`
+	URL         string `json:"url"`
+	Render      bool   `json:"render"`
+	Mode        string `json:"mode"`
+	Screenshot  bool   `json:"screenshot"`
+	Images      bool   `json:"images"`
+	ImageFormat string `json:"image_format,omitempty"`
+	MaxDepth    int    `json:"maxDepth"`
+	Limit       int    `json:"limit"`
 }
 
 // NewScrapeTask creates a new task for scraping a single URL.
-func NewScrapeTask(url string, render bool, screenshot bool, images bool) (*asynq.Task, error) {
+func NewScrapeTask(url string, render bool, screenshot bool, images bool, imageFormat string) (*asynq.Task, error) {
 	payload := ScrapePayload{
-		URL:        url,
-		Render:     render,
-		Screenshot: screenshot,
-		Images:     images,
+		URL:         url,
+		Render:      render,
+		Screenshot:  screenshot,
+		Images:      images,
+		ImageFormat: imageFormat,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -49,14 +52,15 @@ func NewScrapeTask(url string, render bool, screenshot bool, images bool) (*asyn
 }
 
 // NewCrawlTask creates a new task for crawling a site starting from a seed URL.
-func NewCrawlTask(crawlURL string, render bool, screenshot bool, images bool, maxDepth int, limit int) (*asynq.Task, error) {
+func NewCrawlTask(crawlURL string, render bool, screenshot bool, images bool, imageFormat string, maxDepth int, limit int) (*asynq.Task, error) {
 	payload := CrawlPayload{
-		URL:        crawlURL,
-		Render:     render,
-		Screenshot: screenshot,
-		Images:     images,
-		MaxDepth:   maxDepth,
-		Limit:      limit,
+		URL:         crawlURL,
+		Render:      render,
+		Screenshot:  screenshot,
+		Images:      images,
+		ImageFormat: imageFormat,
+		MaxDepth:    maxDepth,
+		Limit:       limit,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

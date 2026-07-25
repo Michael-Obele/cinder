@@ -14,12 +14,13 @@ import (
 )
 
 type CrawlRequest struct {
-	URL        string `json:"url" binding:"required,url"`
-	Render     bool   `json:"render"`
-	Screenshot bool   `json:"screenshot"`
-	Images     bool   `json:"images"`
-	MaxDepth   int    `json:"maxDepth"`
-	Limit      int    `json:"limit"`
+	URL            string `json:"url" binding:"required,url"`
+	Render         bool   `json:"render"`
+	Screenshot     bool   `json:"screenshot"`
+	Images         bool   `json:"images"`
+	ImageFormat    string `json:"image_format"`
+	MaxDepth       int    `json:"maxDepth"`
+	Limit          int    `json:"limit"`
 }
 
 type CrawlResponse struct {
@@ -28,6 +29,7 @@ type CrawlResponse struct {
 	Render     bool   `json:"render"`
 	Screenshot bool   `json:"screenshot"`
 	Images     bool   `json:"images"`
+	ImageFormat string `json:"image_format,omitempty"`
 	MaxDepth   int    `json:"maxDepth"`
 	Limit      int    `json:"limit"`
 }
@@ -103,7 +105,7 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 		req.Limit = 100
 	}
 
-	task, err := worker.NewCrawlTask(req.URL, req.Render, req.Screenshot, req.Images, req.MaxDepth, req.Limit)
+	task, err := worker.NewCrawlTask(req.URL, req.Render, req.Screenshot, req.Images, req.ImageFormat, req.MaxDepth, req.Limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
@@ -116,13 +118,14 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, CrawlResponse{
-		ID:         info.ID,
-		URL:        req.URL,
-		Render:     req.Render,
-		Screenshot: req.Screenshot,
-		Images:     req.Images,
-		MaxDepth:   req.MaxDepth,
-		Limit:      req.Limit,
+		ID:          info.ID,
+		URL:         req.URL,
+		Render:      req.Render,
+		Screenshot:  req.Screenshot,
+		Images:      req.Images,
+		ImageFormat: req.ImageFormat,
+		MaxDepth:    req.MaxDepth,
+		Limit:       req.Limit,
 	})
 }
 

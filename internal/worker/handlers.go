@@ -40,9 +40,19 @@ func (h *ScrapeTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		mode = "smart"
 	}
 
+	// Parse image format
+	imageFormat := domain.ImageFormatURL
+	switch payload.ImageFormat {
+	case "blob":
+		imageFormat = domain.ImageFormatBlob
+	case "url":
+		imageFormat = domain.ImageFormatURL
+	}
+
 	result, err := h.scraper.Scrape(ctx, payload.URL, mode, domain.ScrapeOptions{
-		Screenshot: payload.Screenshot,
-		Images:     payload.Images,
+		Screenshot:  payload.Screenshot,
+		Images:      payload.Images,
+		ImageFormat: imageFormat,
 	})
 	if err != nil {
 		h.logger.Error("Scraping failed", "error", err, "url", payload.URL, "task_id", t.ResultWriter().TaskID())

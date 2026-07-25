@@ -351,8 +351,8 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
         return
     }
 
-    // Create task payload
-    task, err := worker.NewScrapeTask(req.URL, req.Render)
+    // Create task payload (screenshot, images, imageFormat are optional params)
+    task, err := worker.NewScrapeTask(req.URL, req.Render, false, false, "")
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
         return
@@ -715,8 +715,14 @@ type ScrapePayload struct {
 ```go
 const TypeScrape = "scrape:url"  // Task type identifier
 
-func NewScrapeTask(url string, render bool) (*asynq.Task, error) {
-    payload := ScrapePayload{URL: url, Render: render}
+func NewScrapeTask(url string, render bool, screenshot bool, images bool, imageFormat string) (*asynq.Task, error) {
+    payload := ScrapePayload{
+        URL:         url,
+        Render:      render,
+        Screenshot:  screenshot,
+        Images:      images,
+        ImageFormat: imageFormat,
+    }
 
     data, err := json.Marshal(payload)  // Serialize to JSON bytes
     if err != nil {

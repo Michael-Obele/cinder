@@ -6,12 +6,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"encoding/json"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/image"
+	"github.com/standard-user/cinder/pkg/logger"
 )
 
 // Service acts as the main entry point and chooses the right scraper
@@ -143,7 +146,36 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		return nil, err
 	}
 
-	// 3. Save to Cache
+	// 3. Extract images if requested
+	if opts.Images && result != nil && result.HTML != "" {
+		maxImages := opts.MaxImages
+		if maxImages <= 0 {
+			maxImages = 10
+		}
+		result.Images = image.ExtractPageImages(result.HTML, url, maxImages)
+
+		// Fetch and encode each image if blob format requested
+		if opts.ImageFormat == domain.ImageFormatBlob && len(result.Images) > 0 {
+			proc := image.NewProcessor()
+			for i, img := range result.Images {
+				if img.URL == "" {
+					continue
+				}
+				blob, fetchErr := proc.FetchAndEncode(img.URL)
+				if fetchErr != nil {
+					logger.Log.Warn("Failed to fetch image for blob", "url", img.URL, "error", fetchErr)
+					continue
+				}
+				result.Images[i].Blob = blob.DataURI
+				if strings.HasPrefix(blob.MimeType, "image/") {
+					result.Images[i].Format = strings.TrimPrefix(blob.MimeType, "image/")
+				}
+				result.Images[i].SizeBytes = int64(len(blob.RawBytes))
+			}
+		}
+	}
+
+	// 4. Save to Cache
 	if s.redis != nil {
 		data, err := json.Marshal(result)
 		if err == nil {

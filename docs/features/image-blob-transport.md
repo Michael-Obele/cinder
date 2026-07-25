@@ -3,7 +3,7 @@
 > Detailed plan for capturing, encoding, and transporting images as self-contained blobs that can be directly fed into multimodal AI APIs (OpenAI GPT-4o, Google Gemini, Anthropic Claude, etc.).
 > See [Documentation Index](../guides/INDEX.md) for core guides.
 
-**Status**: ✅ **Partially Implemented**  
+**Status**: ✅ **Fully Implemented & Connected**  
 **Last Updated**: July 25, 2026  
 **Related**: [image-screenshot-feature.md](./image-screenshot-feature.md)
 
@@ -76,7 +76,7 @@ POST /v1/scrape                        {
                                        }
 ```
 
-> ⚠️ **Current state:** Screenshots are fully implemented in `chromedp.go`. The image extraction pipeline (`internal/image/extractor.go` + `processor.go`) exists but is **not yet wired into the scrape service flow** — the `Images` flag is accepted by the API but image extraction from HTML is pending connection in the service layer. Screenshots work end-to-end.
+> ✅ **Current state:** The full image pipeline is now connected end-to-end. Screenshots are captured in `chromedp.go`, image extraction from HTML runs in `internal/scraper/service.go` after both scrapers return, and blob encoding uses `internal/image/processor.go`. The `Images` flag, `image_format`, `max_images`, and `max_image_size_kb` parameters are fully wired through the API handler → scraper service → image processor.
 
 ### Architecture Diagram
 
@@ -90,9 +90,10 @@ POST /v1/scrape                        {
 ┌───────────────────────────────────────────────────────────┐
 │                     Scraper Service                       │
 │  Scrape(ctx, url, mode, opts)                             │
-│    ├── CollyScraper.Scrape()      → text + image metadata │
+│    ├── CollyScraper.Scrape()      → text + HTML           │
 │    ├── ChromedpScraper.Scrape()   → text + screenshot[]   │
-│    └── ImageProcessor.Process()   → blob encoding         │
+│    ├── ExtractPageImages(HTML)    → ImageData[]           │
+│    └── Processor.FetchAndEncode() → blob encoding         │
 └───────────────┬───────────────────────────────────────────┘
                 │
                 ▼

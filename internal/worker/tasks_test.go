@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewScrapeTask(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", false, false, false)
+	task, err := NewScrapeTask("https://example.com", false, false, false, "")
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestNewScrapeTask(t *testing.T) {
 }
 
 func TestNewScrapeTask_WithRender(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", true, false, false)
+	task, err := NewScrapeTask("https://example.com", true, false, false, "")
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestNewScrapeTask_WithRender(t *testing.T) {
 }
 
 func TestNewScrapeTask_TaskType(t *testing.T) {
-	task, err := NewScrapeTask("https://example.com", false, false, false)
+	task, err := NewScrapeTask("https://example.com", false, false, false, "")
 	if err != nil {
 		t.Fatalf("NewScrapeTask failed: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestScrapePayload_ModeMapping(t *testing.T) {
 // --- CrawlTask Tests ---
 
 func TestNewCrawlTask(t *testing.T) {
-	task, err := NewCrawlTask("https://example.com", false, false, false, 3, 20)
+	task, err := NewCrawlTask("https://example.com", false, false, false, "", 3, 20)
 	if err != nil {
 		t.Fatalf("NewCrawlTask failed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestNewCrawlTask(t *testing.T) {
 }
 
 func TestNewCrawlTask_WithAllOptions(t *testing.T) {
-	task, err := NewCrawlTask("https://docs.example.com", true, true, true, 5, 50)
+	task, err := NewCrawlTask("https://docs.example.com", true, true, true, "", 5, 50)
 	if err != nil {
 		t.Fatalf("NewCrawlTask failed: %v", err)
 	}

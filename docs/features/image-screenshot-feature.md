@@ -396,12 +396,16 @@ All phases have been implemented. Here's the current state:
 ### ✅ Phase 2: Scraper Implementation (DONE)
 
 - `internal/scraper/chromedp.go` — Captures full-page base64 JPEG screenshots when `opts.Screenshot` is true
-- `internal/scraper/colly.go` — Image extraction deferred to `internal/image/extractor.go`
-- `internal/scraper/service.go` — Passes `ScrapeOptions` through; forces dynamic mode when screenshot is requested
+- `internal/scraper/colly.go` — Returns HTML for centralized image extraction in service layer
+- `internal/scraper/service.go` — Passes `ScrapeOptions` through; forces dynamic mode when screenshot is requested; runs `image.ExtractPageImages()` on returned HTML when `opts.Images` is true; runs `image.Processor.FetchAndEncode()` for blob encoding
 
-### 🟡 Phase 3: Search Integration (NOT STARTED)
+### ✅ Phase 3: Scrape Service Integration (DONE)
 
-Image enrichment for search results has not been implemented — search is currently text-only.
+Image extraction is now wired into `internal/scraper/service.go`:
+- After each scraper returns HTML, if `opts.Images` is true, `image.ExtractPageImages()` populates `result.Images`
+- If `opts.ImageFormat` is `"blob"`, `image.Processor.FetchAndEncode()` fetches and encodes each image to base64 data URIs
+- All image fields (`ImageFormat`, `MaxImages`, `MaxImageSizeKB`) are exposed in the API (`ScrapeRequest`) and worker tasks (`ScrapePayload`, `CrawlPayload`)
+- Screenshots and image extraction work independently — screenshots via chromedp, image extraction via service layer
 
 ### ✅ Phase 4: Infrastructure (DONE)
 

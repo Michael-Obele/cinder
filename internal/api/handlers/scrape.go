@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
@@ -11,11 +12,14 @@ import (
 )
 
 type ScrapeRequest struct {
-	URL        string `json:"url" binding:"required,url"`
-	Render     bool   `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode       string `json:"mode"`   // "smart", "static", "dynamic"
-	Screenshot bool   `json:"screenshot"`
-	Images     bool   `json:"images"`
+	URL            string `json:"url" binding:"required,url"`
+	Render         bool   `json:"render"`        // Deprecated: usage ignores Mode if true
+	Mode           string `json:"mode"`          // "smart", "static", "dynamic"
+	Screenshot     bool   `json:"screenshot"`
+	Images         bool   `json:"images"`
+	ImageFormat    string `json:"image_format"`   // "url" or "blob"
+	MaxImages      int    `json:"max_images"`
+	MaxImageSizeKB int    `json:"max_image_size_kb"`
 }
 
 type ScrapeHandler struct {
@@ -50,12 +54,15 @@ func wordCount(text string) int {
 // @Tags         scrape
 // @Accept       json
 // @Produce      json
-// @Param        url        query     string  false  "The URL to scrape"
-// @Param        mode       query     string  false  "Scraping mode: smart, static, dynamic"
-// @Param        render     query     bool    false  "Deprecated: use mode=dynamic instead"
-// @Param        screenshot query     bool    false  "Capture full-page screenshot (requires mode=dynamic or smart)"
-// @Param        images     query     bool    false  "Extract images as base64 blobs"
-// @Param        body       body      ScrapeRequest  false  "JSON request body (alternative to query params)"
+// @Param        url              query     string  false  "The URL to scrape"
+// @Param        mode             query     string  false  "Scraping mode: smart, static, dynamic"
+// @Param        render           query     bool    false  "Deprecated: use mode=dynamic instead"
+// @Param        screenshot       query     bool    false  "Capture full-page screenshot (requires mode=dynamic or smart)"
+// @Param        images           query     bool    false  "Extract images from the page"
+// @Param        image_format     query     string  false  "Image transport: 'url' (default, metadata only) or 'blob' (base64 data URIs)"
+// @Param        max_images       query     int     false  "Maximum images to extract (default: 10)"
+// @Param        max_image_size_kb query    int     false  "Max individual image size in KB (default: 5120)"
+// @Param        body             body      ScrapeRequest  false  "JSON request body (alternative to query params)"
 // @Success      200    {object}  domain.ScrapeResult
 // @Failure      400    {object}  map[string]interface{}
 // @Failure      500    {object}  map[string]interface{}
@@ -89,6 +96,19 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	if images := c.Query("images"); images == "true" {
 		req.Images = true
 	}
+	if imageFormat := c.Query("image_format"); imageFormat != "" {
+		req.ImageFormat = imageFormat
+	}
+	if maxImagesStr := c.Query("max_images"); maxImagesStr != "" {
+		if maxImages, err := strconv.Atoi(maxImagesStr); err == nil {
+			req.MaxImages = maxImages
+		}
+	}
+	if maxSizeStr := c.Query("max_image_size_kb"); maxSizeStr != "" {
+		if maxSize, err := strconv.Atoi(maxSizeStr); err == nil {
+			req.MaxImageSizeKB = maxSize
+		}
+	}
 
 	if req.URL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "URL is required"})
@@ -104,9 +124,21 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		mode = "smart"
 	}
 
+	// Parse image format
+	imageFormat := domain.ImageFormatURL
+	switch req.ImageFormat {
+	case "blob":
+		imageFormat = domain.ImageFormatBlob
+	case "url":
+		imageFormat = domain.ImageFormatURL
+	}
+
 	result, err := h.service.Scrape(c.Request.Context(), req.URL, mode, domain.ScrapeOptions{
-		Screenshot: req.Screenshot,
-		Images:     req.Images,
+		Screenshot:     req.Screenshot,
+		Images:         req.Images,
+		ImageFormat:    imageFormat,
+		MaxImages:      req.MaxImages,
+		MaxImageSizeKB: req.MaxImageSizeKB,
 	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)
