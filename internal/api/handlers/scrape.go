@@ -13,11 +13,11 @@ import (
 
 type ScrapeRequest struct {
 	URL            string `json:"url" binding:"required,url"`
-	Render         bool   `json:"render"`        // Deprecated: usage ignores Mode if true
-	Mode           string `json:"mode"`          // "smart", "static", "dynamic"
+	Render         bool   `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode           string `json:"mode"`   // "smart", "static", "dynamic"
 	Screenshot     bool   `json:"screenshot"`
 	Images         bool   `json:"images"`
-	ImageFormat    string `json:"image_format"`   // "url" or "blob"
+	ImageFormat    string `json:"image_format"` // "url" or "blob"
 	MaxImages      int    `json:"max_images"`
 	MaxImageSizeKB int    `json:"max_image_size_kb"`
 }

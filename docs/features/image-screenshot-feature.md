@@ -319,13 +319,13 @@ func TestResultJSON_OmitEmptyImages(t *testing.T) {
 
 Image features are controlled per-request via API parameters — there are no dedicated env vars for enabling/disabling them globally.
 
-| API Parameter    | Type    | Default | Description                                    |
-| ---------------- | ------- | ------- | ---------------------------------------------- |
-| `screenshot`     | boolean | `false` | Capture full-page base64 JPEG screenshot       |
-| `images`         | boolean | `false` | Extract images from the page                   |
-| `image_format`   | string  | `"url"` | `"url"` (metadata) or `"blob"` (base64 data URI) |
-| `max_images`     | int     | `10`    | Maximum images to extract                      |
-| `max_image_size_kb` | int  | `5120`  | Max individual image size (5MB default)        |
+| API Parameter       | Type    | Default | Description                                      |
+| ------------------- | ------- | ------- | ------------------------------------------------ |
+| `screenshot`        | boolean | `false` | Capture full-page base64 JPEG screenshot         |
+| `images`            | boolean | `false` | Extract images from the page                     |
+| `image_format`      | string  | `"url"` | `"url"` (metadata) or `"blob"` (base64 data URI) |
+| `max_images`        | int     | `10`    | Maximum images to extract                        |
+| `max_image_size_kb` | int     | `5120`  | Max individual image size (5MB default)          |
 
 Hardcoded limits in `internal/image/processor.go`:
 
@@ -402,6 +402,7 @@ All phases have been implemented. Here's the current state:
 ### ✅ Phase 3: Scrape Service Integration (DONE)
 
 Image extraction is now wired into `internal/scraper/service.go`:
+
 - After each scraper returns HTML, if `opts.Images` is true, `image.ExtractPageImages()` populates `result.Images`
 - If `opts.ImageFormat` is `"blob"`, `image.Processor.FetchAndEncode()` fetches and encodes each image to base64 data URIs
 - All image fields (`ImageFormat`, `MaxImages`, `MaxImageSizeKB`) are exposed in the API (`ScrapeRequest`) and worker tasks (`ScrapePayload`, `CrawlPayload`)
