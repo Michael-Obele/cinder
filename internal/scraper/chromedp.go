@@ -24,7 +24,6 @@ func NewChromedpScraper() *ChromedpScraper {
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true), // Critical for Docker
-		chromedp.Flag("single-process", true),
 		chromedp.UserAgent("Mozilla/5.0 (compatible; CinderBot/1.0; +http://github.com/standard-user/cinder)"),
 	)
 
