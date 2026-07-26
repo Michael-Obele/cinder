@@ -86,11 +86,13 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 
 	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
-	// Navigate and capture HTML first
+	// Navigate and capture HTML first.
+	// Use Evaluate instead of OuterHTML to avoid stale node references
+	// on SPAs that replace the DOM after the initial page load.
 	err := chromedp.Run(taskCtx,
 		chromedp.Navigate(url),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
-		chromedp.OuterHTML("html", &htmlContent),
+		chromedp.Evaluate(`document.documentElement.outerHTML`, &htmlContent),
 	)
 
 	if err != nil {
