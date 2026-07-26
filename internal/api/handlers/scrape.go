@@ -142,7 +142,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Scraping failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

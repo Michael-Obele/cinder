@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -23,24 +24,37 @@ func NewChromedpScraper() *ChromedpScraper {
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true), // Critical for Docker
+		chromedp.Flag("single-process", true),
 		chromedp.UserAgent("Mozilla/5.0 (compatible; CinderBot/1.0; +http://github.com/standard-user/cinder)"),
 	)
 
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-
-	// We start a mock run to ensure the browser process starts immediately,
-	// rather than waiting for the first request.
-	go func() {
-		ctx, c := chromedp.NewContext(allocCtx)
-		defer c()
-		if err := chromedp.Run(ctx); err != nil {
-			logger.Log.Error("Failed to start initial browser process", "error", err)
+	// Respect CHROME_BIN env var if set (Dockerfile sets it)
+	if chromeBin := os.Getenv("CHROME_BIN"); chromeBin != "" {
+		if _, err := os.Stat(chromeBin); err == nil {
+			opts = append(opts, chromedp.ExecPath(chromeBin))
+			logger.Log.Info("Chrome binary found", "path", chromeBin)
+		} else {
+			logger.Log.Warn("CHROME_BIN set but binary not found", "path", chromeBin, "error", err)
 		}
-	}()
+	}
+
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+
+	// Warm up Chrome synchronously so we fail fast at startup if unavailable.
+	// Use a short timeout — this just validates the browser starts.
+	warmCtx, warmCancel := chromedp.NewContext(allocCtx)
+	defer warmCancel()
+	timedCtx, cancelTimeout := context.WithTimeout(warmCtx, 15*time.Second)
+	defer cancelTimeout()
+	if err := chromedp.Run(timedCtx); err != nil {
+		logger.Log.Warn("Chrome browser not available — dynamic rendering disabled", "error", err)
+	} else {
+		logger.Log.Info("Chrome browser started successfully (dynamic rendering enabled)")
+	}
 
 	return &ChromedpScraper{
 		allocCtx: allocCtx,
-		cancel:   cancel,
+		cancel:   allocCancel,
 	}
 }
 

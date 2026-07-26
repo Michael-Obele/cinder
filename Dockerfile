@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/cinder-worker ./c
 # Final Stage
 FROM alpine:latest
 
-# Install Chromium, fonts, and runtime dependencies
+# Install Chromium, fonts, runtime dependencies, and tini for zombie reaping
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -23,7 +23,8 @@ RUN apk add --no-cache \
     tzdata \
     ttf-freefont \
     font-noto-emoji \
-    wqy-zenhei
+    wqy-zenhei \
+    tini
 
 # Set env for Chromedp to find chromium
 ENV CHROME_BIN=/usr/bin/chromium-browser
@@ -39,4 +40,6 @@ RUN ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable
 
 EXPOSE 8080
 
+# tini reaps zombie processes that Chrome spawns
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["./cinder-api"]
