@@ -86,19 +86,22 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 
 	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
-	actions := []chromedp.Action{
+	// Navigate and capture HTML first
+	err := chromedp.Run(taskCtx,
 		chromedp.Navigate(url),
-		// Wait for body to be visible - this ensures some content is loaded.
 		chromedp.WaitVisible("body", chromedp.ByQuery),
 		chromedp.OuterHTML("html", &htmlContent),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("chromedp failed: %w", err)
 	}
 
+	// If screenshot is requested, do it in a separate Run call so the
+	// viewport resize doesn't invalidate the HTML node references from
+	// the navigation action above.
 	if opts.Screenshot {
-		// Use viewport screenshot instead of FullScreenshot.
-		// FullScreenshot captures the entire page height, which is extremely
-		// slow on long SPAs and can trigger context timeouts. A viewport
-		// screenshot is fast, bounded, and usually what callers actually want.
-		actions = append(actions,
+		err = chromedp.Run(taskCtx,
 			chromedp.EmulateViewport(1920, 1080),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 				var err error
@@ -108,12 +111,10 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 				return err
 			}),
 		)
-	}
-
-	err := chromedp.Run(taskCtx, actions...)
-
-	if err != nil {
-		return nil, fmt.Errorf("chromedp failed: %w", err)
+		if err != nil {
+			// Log screenshot failure but don't fail the whole scrape
+			logger.Log.Warn("Screenshot failed, returning HTML-only result", "url", url, "error", err)
+		}
 	}
 
 	if htmlContent == "" {
