@@ -140,8 +140,26 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Extract images as base64 blobs",
+                        "description": "Extract images from the page",
                         "name": "images",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image transport: 'url' (default, metadata only) or 'blob' (base64 data URIs)",
+                        "name": "image_format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum images to extract (default: 10)",
+                        "name": "max_images",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max individual image size in KB (default: 5120)",
+                        "name": "max_image_size_kb",
                         "in": "query"
                     },
                     {
@@ -215,8 +233,26 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Extract images as base64 blobs",
+                        "description": "Extract images from the page",
                         "name": "images",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image transport: 'url' (default, metadata only) or 'blob' (base64 data URIs)",
+                        "name": "image_format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum images to extract (default: 10)",
+                        "name": "max_images",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max individual image size in KB (default: 5120)",
+                        "name": "max_image_size_kb",
                         "in": "query"
                     },
                     {
@@ -495,6 +531,9 @@ const docTemplate = `{
                 "url"
             ],
             "properties": {
+                "image_format": {
+                    "type": "string"
+                },
                 "images": {
                     "type": "boolean"
                 },
@@ -519,6 +558,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "id": {
+                    "type": "string"
+                },
+                "image_format": {
                     "type": "string"
                 },
                 "images": {
@@ -547,8 +589,18 @@ const docTemplate = `{
                 "url"
             ],
             "properties": {
+                "image_format": {
+                    "description": "\"url\" or \"blob\"",
+                    "type": "string"
+                },
                 "images": {
                     "type": "boolean"
+                },
+                "max_image_size_kb": {
+                    "type": "integer"
+                },
+                "max_images": {
+                    "type": "integer"
                 },
                 "mode": {
                     "description": "\"smart\", \"static\", \"dynamic\"",
