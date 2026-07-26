@@ -8,6 +8,7 @@ import (
 	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/pkg/logger"
@@ -93,7 +94,20 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	}
 
 	if opts.Screenshot {
-		actions = append(actions, chromedp.FullScreenshot(&screenshotBuf, 90))
+		// Use viewport screenshot instead of FullScreenshot.
+		// FullScreenshot captures the entire page height, which is extremely
+		// slow on long SPAs and can trigger context timeouts. A viewport
+		// screenshot is fast, bounded, and usually what callers actually want.
+		actions = append(actions,
+			chromedp.EmulateViewport(1920, 1080),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				var err error
+				screenshotBuf, err = page.CaptureScreenshot().
+					WithQuality(90).
+					Do(ctx)
+				return err
+			}),
+		)
 	}
 
 	err := chromedp.Run(taskCtx, actions...)
