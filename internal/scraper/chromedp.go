@@ -5,21 +5,57 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/brianvoe/gofakeit/v6"
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/pkg/logger"
 )
 
+// defaultRecycleAfter is the default number of scrapes before the Chrome
+// allocator is restarted to bound long-term memory growth.
+const defaultRecycleAfter = 100
+
+// ChromedpScraper reuses a single Chrome allocator across requests, spawning
+// lightweight tabs per scrape, and restarts the allocator periodically to
+// prevent memory leaks.
 type ChromedpScraper struct {
-	allocCtx context.Context
-	cancel   context.CancelFunc
+	mu           sync.Mutex
+	allocCtx     context.Context
+	cancel       context.CancelFunc
+	scrapeCount  int
+	recycleAfter int
+	newAllocator func() (context.Context, context.CancelFunc)
 }
 
+// NewChromedpScraper creates a scraper with the default recycle threshold.
 func NewChromedpScraper() *ChromedpScraper {
+	return NewChromedpScraperWithLimit(defaultRecycleAfter)
+}
+
+// NewChromedpScraperWithLimit creates a scraper that restarts its Chrome
+// allocator after recycleAfter scrapes. Values <= 0 fall back to the default.
+func NewChromedpScraperWithLimit(recycleAfter int) *ChromedpScraper {
+	if recycleAfter <= 0 {
+		recycleAfter = defaultRecycleAfter
+	}
+	s := &ChromedpScraper{
+		recycleAfter: recycleAfter,
+		newAllocator: buildAllocator,
+	}
+	s.allocCtx, s.cancel = s.newAllocator()
+	warmUp(s.allocCtx)
+	return s
+}
+
+// buildAllocator constructs a fresh Chrome exec allocator with the flags
+// required for headless container operation.
+func buildAllocator() (context.Context, context.CancelFunc) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
@@ -38,10 +74,11 @@ func NewChromedpScraper() *ChromedpScraper {
 		}
 	}
 
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	return chromedp.NewExecAllocator(context.Background(), opts...)
+}
 
-	// Warm up Chrome synchronously so we fail fast at startup if unavailable.
-	// Use a short timeout — this just validates the browser starts.
+// warmUp starts the browser synchronously so failures surface at startup.
+func warmUp(allocCtx context.Context) {
 	warmCtx, warmCancel := chromedp.NewContext(allocCtx)
 	defer warmCancel()
 	timedCtx, cancelTimeout := context.WithTimeout(warmCtx, 15*time.Second)
@@ -51,16 +88,42 @@ func NewChromedpScraper() *ChromedpScraper {
 	} else {
 		logger.Log.Info("Chrome browser started successfully (dynamic rendering enabled)")
 	}
+}
 
-	return &ChromedpScraper{
-		allocCtx: allocCtx,
-		cancel:   allocCancel,
+// shouldRecycle reports whether the scrape counter crossed the threshold.
+func shouldRecycle(count, after int) bool {
+	return after > 0 && count >= after
+}
+
+// beginScrape atomically bumps the scrape counter, recycling the allocator
+// when the threshold is crossed, and returns the current allocator context.
+func (s *ChromedpScraper) beginScrape() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.scrapeCount++
+	if shouldRecycle(s.scrapeCount, s.recycleAfter) {
+		s.recycleLocked()
 	}
+	return s.allocCtx
+}
+
+// recycleLocked cancels the old allocator and swaps in a fresh one. Callers
+// must hold s.mu. The new browser spawns lazily on the next tab use.
+func (s *ChromedpScraper) recycleLocked() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.allocCtx, s.cancel = s.newAllocator()
+	s.scrapeCount = 0
+	logger.Log.Info("Chrome allocator recycled to bound memory growth")
 }
 
 func (s *ChromedpScraper) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.cancel != nil {
 		s.cancel()
+		s.cancel = nil
 	}
 }
 
@@ -106,7 +169,7 @@ func resolveScreenshotParams(opts *domain.ScreenshotOptions) screenshotParams {
 func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	// Create a new tab (Context) from the existing allocator
 	// This is much faster than starting a new browser process
-	taskCtx, cancelTask := chromedp.NewContext(s.allocCtx)
+	taskCtx, cancelTask := chromedp.NewContext(s.beginScrape())
 	defer cancelTask()
 
 	// Set a hard timeout for the browser actions
@@ -126,9 +189,11 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
 	// Navigate and capture HTML first.
+	// Rotate the User-Agent per tab for anti-detection (mirrors colly).
 	// Use Evaluate instead of OuterHTML to avoid stale node references
 	// on SPAs that replace the DOM after the initial page load.
 	err := chromedp.Run(taskCtx,
+		emulation.SetUserAgentOverride(gofakeit.UserAgent()),
 		chromedp.Navigate(url),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
 		chromedp.Evaluate(`document.documentElement.outerHTML`, &htmlContent),

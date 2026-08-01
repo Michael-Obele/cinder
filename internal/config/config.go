@@ -26,6 +26,10 @@ type ServerConfig struct {
 
 type AppConfig struct {
 	LogLevel string `mapstructure:"loglevel"` // debug, info, warn, error
+
+	// ChromeRecycleAfter restarts the Chrome allocator after this many
+	// scrapes to bound browser memory growth (0 = default 100).
+	ChromeRecycleAfter int `mapstructure:"chrome_recycle_after"`
 }
 
 type RedisConfig struct {
@@ -57,6 +61,7 @@ func Load() (*Config, error) {
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("app.loglevel", "info")
+	v.SetDefault("app.chrome_recycle_after", 100)
 	v.SetDefault("redis.url", "")
 	v.SetDefault("redis.host", "")
 	v.SetDefault("redis.port", "")

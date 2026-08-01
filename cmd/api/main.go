@@ -59,7 +59,7 @@ func main() {
 	}
 
 	collyScraper := scraper.NewCollyScraper()
-	chromedpScraper := scraper.NewChromedpScraper()
+	chromedpScraper := scraper.NewChromedpScraperWithLimit(cfg.App.ChromeRecycleAfter)
 	defer chromedpScraper.Close()
 	scraperService := scraper.NewService(collyScraper, chromedpScraper, redisClient)
 
