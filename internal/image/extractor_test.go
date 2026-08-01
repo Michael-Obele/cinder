@@ -1,7 +1,10 @@
 package image
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/standard-user/cinder/internal/domain"
 )
 
 func TestExtractPageImages_OGImage(t *testing.T) {
@@ -179,6 +182,103 @@ func TestExtractPageImages_EmptySrc(t *testing.T) {
 
 	if len(images) != 0 {
 		t.Errorf("Expected 0 images for empty/missing src, got %d", len(images))
+	}
+}
+
+// --- v2: srcset, lazy-load, picture, optimizer, ranking ---
+
+func TestPickFromSrcset_PicksLargestWidth(t *testing.T) {
+	srcset := "a-480w.jpg 480w, a-800w.jpg 800w, a-1200w.jpg 1200w"
+	if got := pickFromSrcset(srcset); got != "a-1200w.jpg" {
+		t.Errorf("expected 1200w candidate, got %q", got)
+	}
+}
+
+func TestPickFromSrcset_PicksHighestDensity(t *testing.T) {
+	srcset := "a-1x.jpg 1x, a-2x.jpg 2x"
+	if got := pickFromSrcset(srcset); got != "a-2x.jpg" {
+		t.Errorf("expected 2x candidate, got %q", got)
+	}
+}
+
+func TestExtractPageImages_SrcsetPicked(t *testing.T) {
+	html := `<html><body><img srcset="/hero-480.jpg 480w, /hero-1200.jpg 1200w" alt="Hero"></body></html>`
+	images := ExtractPageImages(html, "https://example.com", 10)
+	if len(images) != 1 || images[0].URL != "https://example.com/hero-1200.jpg" {
+		t.Fatalf("expected srcset max candidate, got %+v", images)
+	}
+}
+
+func TestExtractPageImages_LazyLoadAttrs(t *testing.T) {
+	html := `<html><body>
+		<img src="data:image/gif;base64,R0lGOD" data-src="/lazy-real.jpg" alt="Lazy">
+	</body></html>`
+	images := ExtractPageImages(html, "https://example.com", 10)
+	if len(images) != 1 || images[0].URL != "https://example.com/lazy-real.jpg" {
+		t.Fatalf("expected data-src fallback, got %+v", images)
+	}
+}
+
+func TestExtractPageImages_PictureSource(t *testing.T) {
+	html := `<html><body>
+		<picture><source srcset="/art-2000.webp 2000w"><img src="/art-fallback.jpg" alt="Art"></picture>
+	</body></html>`
+	images := ExtractPageImages(html, "https://example.com", 10)
+	if len(images) != 1 || images[0].URL != "https://example.com/art-2000.webp" {
+		t.Fatalf("expected picture source candidate, got %+v", images)
+	}
+}
+
+func TestExtractPageImages_UnwrapsNextImageOptimizer(t *testing.T) {
+	html := `<html><body><img src="/_next/image?url=%2Fhero.png&w=1200&q=75" alt="Hero"></body></html>`
+	images := ExtractPageImages(html, "https://example.com", 10)
+	if len(images) != 1 || images[0].URL != "https://example.com/hero.png" {
+		t.Fatalf("expected unwrapped origin URL, got %+v", images)
+	}
+}
+
+func TestExtractPageImages_BackgroundImage(t *testing.T) {
+	html := `<html><body><div style="background-image: url('/banner.jpg')"></div></body></html>`
+	images := ExtractPageImages(html, "https://example.com", 10)
+	if len(images) != 1 || images[0].URL != "https://example.com/banner.jpg" || images[0].SourceType != "background" {
+		t.Fatalf("expected background image, got %+v", images)
+	}
+}
+
+func TestExtractPageImages_Ranking_BeatsAvatars(t *testing.T) {
+	// Mirrors the real-world case observed on firecrawl.dev/blog: og:image,
+	// one large hero, and several 48px author avatars. max=2 must return
+	// og + hero, NOT the avatars.
+	html := `<html><head><meta property="og:image" content="https://example.com/og.png"></head><body>
+		<img src="/_next/image?url=%2Fimages%2Fblog%2Fhero.png&w=1200" alt="Hero story">
+		<img src="/_next/image?url=%2Fblog%2Fauthors%2Falice.jpg&w=48" alt="Alice">
+		<img src="/_next/image?url=%2Fblog%2Fauthors%2Fbob.jpg&w=48" alt="Bob">
+		<img src="/_next/image?url=%2Fblog%2Fauthors%2Fcarol.jpg&w=48" alt="Carol">
+	</body></html>`
+
+	images := ExtractPageImages(html, "https://example.com/blog", 2)
+	if len(images) != 2 {
+		t.Fatalf("expected 2 images, got %d: %+v", len(images), images)
+	}
+	if images[0].SourceType != "og:image" {
+		t.Errorf("rank 1 should be og:image, got %+v", images[0])
+	}
+	if images[1].SourceType != "hero" {
+		t.Errorf("rank 2 should be hero, got %+v", images[1])
+	}
+	if strings.Contains(images[1].URL, "48") {
+		t.Errorf("avatar should not outrank hero: %q", images[1].URL)
+	}
+}
+
+func TestScoreImage_AvatarDetection(t *testing.T) {
+	img := domain.ImageData{URL: "https://example.com/avatar.png", SourceType: sourceContent, Width: 48}
+	if s := scoreImage(img); s != 10 {
+		t.Errorf("expected avatar score 10, got %d", s)
+	}
+	hero := domain.ImageData{URL: "https://example.com/hero.png", SourceType: sourceHero, Width: 800}
+	if s := scoreImage(hero); s != 75 {
+		t.Errorf("expected hero score 75, got %d", s)
 	}
 }
 
