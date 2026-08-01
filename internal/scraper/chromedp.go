@@ -312,7 +312,14 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	// don't pollute the LLM-ready output. Falls back to full HTML on failure.
 	rc, _ := ExtractMainContent(htmlContent, url)
 
-	markdown, err := md.ConvertString(rc.ContentHTML)
+	// Apply cleaner-output defaults (block ads, drop base64 images) unless
+	// the caller explicitly disabled them.
+	clean := cleanContent(rc.ContentHTML,
+		opts.BlockAds == nil || *opts.BlockAds,
+		opts.RemoveBase64Images == nil || *opts.RemoveBase64Images,
+	)
+
+	markdown, err := md.ConvertString(clean)
 	if err != nil {
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}

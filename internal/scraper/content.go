@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	readability "github.com/go-shiori/go-readability"
 )
 
@@ -58,4 +59,35 @@ func applyReadabilityMetadata(meta map[string]string, rc *ReadabilityResult) {
 	setMeta("excerpt", rc.Excerpt)
 	setMeta("byline", rc.Byline)
 	setMeta("site_name", rc.SiteName)
+}
+
+// adSelectors matches common ad/tracker containers removed before markdown
+// conversion. blockAds defaults to true in service.go; these are best-effort.
+var adSelectors = []string{
+	".ad", ".ads", ".advert", ".advertisement", ".banner-ad",
+	"[class*='advert']", "[id*='advert']", "[class*='ad-banner']",
+	"iframe[src*='doubleclick']", "iframe[src*='googlesyndication']",
+	"[aria-label='Advertisement']",
+}
+
+// cleanContent applies the block_ads and remove_base64_images passes to raw
+// HTML, returning HTML ready for markdown conversion. Both default on.
+func cleanContent(rawHTML string, blockAds, removeBase64Images bool) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(rawHTML))
+	if err != nil {
+		return rawHTML
+	}
+	if blockAds {
+		for _, sel := range adSelectors {
+			doc.Find(sel).Remove()
+		}
+	}
+	if removeBase64Images {
+		doc.Find("img[src^='data:']").Remove()
+	}
+	out, err := doc.Html()
+	if err != nil {
+		return rawHTML
+	}
+	return out
 }

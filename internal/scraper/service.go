@@ -14,6 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/extract"
 	"github.com/standard-user/cinder/internal/image"
 	"github.com/standard-user/cinder/pkg/logger"
 	"golang.org/x/sync/errgroup"
@@ -174,6 +175,29 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 
 	if err != nil {
 		return nil, err
+	}
+
+	// 3a. Deterministic schema extraction (no LLM).
+	if opts.ExtractSchema != nil && result.HTML != "" {
+		extracted, extErr := extract.Apply(result.HTML, opts.ExtractSchema)
+		if extErr != nil {
+			logger.Log.Warn("Schema extraction failed", "url", url, "error", extErr)
+		} else {
+			result.Extracted = extracted
+		}
+	}
+
+	// 3b. Extractive summary.
+	if opts.Summary {
+		result.Summary = extract.Summarize(result.Markdown, result.Metadata["excerpt"], opts.SummarySentences)
+	}
+
+	// 3c. PII redaction applied to markdown and summary.
+	if opts.RedactPII {
+		result.Markdown = extract.RedactPII(result.Markdown)
+		if result.Summary != "" {
+			result.Summary = extract.RedactPII(result.Summary)
+		}
 	}
 
 	// 3. Extract images if requested

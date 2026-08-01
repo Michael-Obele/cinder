@@ -12,17 +12,23 @@ import (
 )
 
 type ScrapeRequest struct {
-	URL            string           `json:"url" binding:"required,url"`
-	Render         bool             `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode           string           `json:"mode"`   // "smart", "static", "dynamic"
-	Screenshot     bool             `json:"screenshot"`
-	ScreenshotOpts *ScreenshotOpts  `json:"screenshot_opts,omitempty"`
-	Images         bool             `json:"images"`
-	ImageFormat    string           `json:"image_format"` // "url" or "blob"
-	MaxImages      int              `json:"max_images"`
-	MaxImageSizeKB int              `json:"max_image_size_kb"`
-	ImageProcess   *ImageProcessReq `json:"image_process,omitempty"`
-	Actions        []ActionReq      `json:"actions,omitempty"`
+	URL                string                         `json:"url" binding:"required,url"`
+	Render             bool                           `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode               string                         `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot         bool                           `json:"screenshot"`
+	ScreenshotOpts     *ScreenshotOpts                `json:"screenshot_opts,omitempty"`
+	Images             bool                           `json:"images"`
+	ImageFormat        string                         `json:"image_format"` // "url" or "blob"
+	MaxImages          int                            `json:"max_images"`
+	MaxImageSizeKB     int                            `json:"max_image_size_kb"`
+	ImageProcess       *ImageProcessReq               `json:"image_process,omitempty"`
+	Actions            []ActionReq                    `json:"actions,omitempty"`
+	ExtractSchema      map[string]domain.ExtractField `json:"extract_schema,omitempty"`
+	Summary            bool                           `json:"summary,omitempty"`
+	SummarySentences   int                            `json:"summary_sentences,omitempty"`
+	RedactPII          bool                           `json:"redact_pii,omitempty"`
+	BlockAds           *bool                          `json:"block_ads,omitempty"`
+	RemoveBase64Images *bool                          `json:"remove_base64_images,omitempty"`
 }
 
 // ScreenshotOpts is the wire format for screenshot configuration.
@@ -202,14 +208,20 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	}
 
 	result, err := h.service.Scrape(c.Request.Context(), req.URL, mode, domain.ScrapeOptions{
-		Screenshot:     req.Screenshot,
-		ScreenshotOpts: mapScreenshotOpts(req.ScreenshotOpts),
-		Images:         req.Images,
-		ImageFormat:    imageFormat,
-		MaxImages:      req.MaxImages,
-		MaxImageSizeKB: req.MaxImageSizeKB,
-		ImageProcess:   mapImageProcess(req.ImageProcess),
-		Actions:        mapActions(req.Actions),
+		Screenshot:         req.Screenshot,
+		ScreenshotOpts:     mapScreenshotOpts(req.ScreenshotOpts),
+		Images:             req.Images,
+		ImageFormat:        imageFormat,
+		MaxImages:          req.MaxImages,
+		MaxImageSizeKB:     req.MaxImageSizeKB,
+		ImageProcess:       mapImageProcess(req.ImageProcess),
+		Actions:            mapActions(req.Actions),
+		ExtractSchema:      req.ExtractSchema,
+		Summary:            req.Summary,
+		SummarySentences:   req.SummarySentences,
+		RedactPII:          req.RedactPII,
+		BlockAds:           req.BlockAds,
+		RemoveBase64Images: req.RemoveBase64Images,
 	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)
