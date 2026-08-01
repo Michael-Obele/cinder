@@ -188,3 +188,37 @@ func TestNewService(t *testing.T) {
 		t.Error("NewService should not return nil")
 	}
 }
+
+func TestCacheKeyFor_DiffersOnOptions(t *testing.T) {
+	baseKey := cacheKeyFor("https://example.com", "smart", domain.ScrapeOptions{Screenshot: false, Images: true, ImageFormat: domain.ImageFormatURL})
+
+	tests := []struct {
+		name string
+		mode string
+		opts domain.ScrapeOptions
+	}{
+		{"different max images", "smart", domain.ScrapeOptions{Screenshot: false, Images: true, ImageFormat: domain.ImageFormatURL, MaxImages: 5}},
+		{"different image format", "smart", domain.ScrapeOptions{Screenshot: false, Images: true, ImageFormat: domain.ImageFormatBlob}},
+		{"different screenshot", "smart", domain.ScrapeOptions{Screenshot: true, Images: true, ImageFormat: domain.ImageFormatURL}},
+		{"different mode", "dynamic", domain.ScrapeOptions{Screenshot: false, Images: true, ImageFormat: domain.ImageFormatURL}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if key := cacheKeyFor("https://example.com", tt.mode, tt.opts); key == baseKey {
+				t.Errorf("cache key should differ for options change: %q == %q", key, baseKey)
+			}
+		})
+	}
+}
+
+func TestCacheKeyFor_StableForSameOptions(t *testing.T) {
+	opts := domain.ScrapeOptions{Images: true, MaxImages: 10, ImageFormat: domain.ImageFormatBlob}
+	k1 := cacheKeyFor("https://example.com", "static", opts)
+	k2 := cacheKeyFor("https://example.com", "static", opts)
+	if k1 != k2 {
+		t.Errorf("cache key should be deterministic: %q != %q", k1, k2)
+	}
+	if len(k1) != len("scrape:")+64 {
+		t.Errorf("expected sha256-length key, got %q", k1)
+	}
+}

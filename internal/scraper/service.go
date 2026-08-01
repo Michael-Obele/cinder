@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
-
-	"encoding/json"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -32,6 +33,23 @@ func NewService(colly domain.Scraper, chromedp domain.Scraper, redis *redis.Clie
 	}
 }
 
+// cacheKeyFor builds a deterministic cache key from the URL, mode, and the
+// full scrape options so option changes never serve stale cached results.
+func cacheKeyFor(url, mode string, opts domain.ScrapeOptions) string {
+	payload := struct {
+		URL  string
+		Mode string
+		Opts domain.ScrapeOptions
+	}{URL: url, Mode: mode, Opts: opts}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		// Marshal of these types cannot fail; fall back to the legacy key.
+		return fmt.Sprintf("scrape:%s:%s", url, mode)
+	}
+	sum := sha256.Sum256(data)
+	return "scrape:" + hex.EncodeToString(sum[:])
+}
+
 func (s *Service) Scrape(ctx context.Context, url string, mode string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	// Default to smart if empty
 	if mode == "" {
@@ -39,7 +57,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 	}
 
 	// 1. Try Cache
-	cacheKey := fmt.Sprintf("scrape:%s:%s:%v:%v", url, mode, opts.Screenshot, opts.Images)
+	cacheKey := cacheKeyFor(url, mode, opts)
 	if s.redis != nil {
 		val, err := s.redis.Get(ctx, cacheKey).Result()
 		if err == nil {
