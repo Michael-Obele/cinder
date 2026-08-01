@@ -57,6 +57,9 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 		v1.POST("/search", searchHandler.Search)
 		v1.GET("/search", searchHandler.Search)
 
+		// URL discovery via sitemap/link traversal.
+		v1.POST("/map", handlers.NewMapHandler().Map)
+
 		// Only register crawl routes if Redis/crawl handler is available
 		if crawlHandler != nil {
 			v1.POST("/crawl", crawlHandler.EnqueueCrawl)
