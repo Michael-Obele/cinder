@@ -13,11 +13,19 @@
 
 ## ✨ Features
 
-- **⚡ Fast & Efficient**: Reuses a single Chrome process with lightweight tabs, avoiding the heavy startup cost of spawning browsers per request.
+- **⚡ Fast & Efficient**: Reuses a single Chrome process with lightweight tabs, avoiding the heavy startup cost of spawning browsers per request. Parallel image blob fetching and parallel crawl workers.
 - **🏭 Monolith Mode**: Runs the API and Async Worker in a single binary/container. Perfect for services like Railway or Leapcell where you pay per active container.
 - **🔄 Async Queues**: Redis-backed job queue (Asynq) for handling heavy scrape jobs without blocking HTTP clients.
-- **🧠 LLM Ready**: Converts complex HTML/SPAs into clean, structured Markdown using `html-to-markdown/v2`.
+- **🧠 LLM Ready**: Converts complex HTML/SPAs into clean, structured Markdown using `html-to-markdown/v2` + readability main-content extraction.
 - **🕵️ Evasion**: Automatic User-Agent rotation and un-detected headless flags.
+- **🗺️ URL Discovery**: `/v1/map` finds site URLs via `robots.txt`/`sitemap.xml` with link-discovery fallback.
+- **🖼️ Image Engine v2**: srcset/lazy-load/`<picture>` extraction, quality-ranked selection (og > hero > content > avatar), dimension sniffing, and optional resize/re-encode.
+- **📡 Signed Webhooks**: Crawl completion and monitor change notifications with HMAC-SHA256 signatures.
+- **📊 Change Tracking**: `/v1/monitor` schedules content-hash checks and alerts on change.
+- **📦 Batch Scrape**: `/v1/batch/scrape` enqueues up to 20 URLs with aggregated status.
+- **🎬 Page Actions**: `wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom` before capture.
+- **🧹 Cleaner Output**: Deterministic schema extraction, extractive summaries, PII redaction, ad blocking, and base64-image removal — all LLM-free.
+- **🔐 Auth & Rate Limiting**: Optional `X-API-Key` auth and per-client rate limiting.
 
 ---
 

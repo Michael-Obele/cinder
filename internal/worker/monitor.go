@@ -107,7 +107,7 @@ func (h *MonitorTaskHandler) checkForChange(ctx context.Context, id string) (boo
 	hashKey := monitorPrefix + id + monitorHashSuffix
 
 	oldHash, getErr := h.kv.Get(ctx, hashKey)
-	if getErr != nil && getErr != kvNotFound {
+	if getErr != nil && getErr != errNotFound {
 		return false, fmt.Errorf("monitor hash read failed: %w", getErr)
 	}
 
@@ -120,7 +120,7 @@ func (h *MonitorTaskHandler) checkForChange(ctx context.Context, id string) (boo
 	}
 
 	// Baseline (first run) → store, no notification.
-	if getErr == kvNotFound {
+	if getErr == errNotFound {
 		return false, h.reschedule(ctx, cfg)
 	}
 
@@ -151,8 +151,8 @@ func (h *MonitorTaskHandler) reschedule(ctx context.Context, cfg *MonitorConfig)
 	return h.kv.Set(ctx, monitorPrefix+cfg.ID, string(data))
 }
 
-// kvNotFound is returned by Get when a key is absent.
-var kvNotFound = fmt.Errorf("key not found")
+// errNotFound is returned by Get when a key is absent.
+var errNotFound = fmt.Errorf("key not found")
 
 // contentHash returns the SHA-256 hex digest of the markdown content.
 func contentHash(markdown string) string {

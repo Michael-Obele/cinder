@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"unicode"
 )
 
 // sentenceSplit splits text on sentence-ending punctuation or line breaks.
@@ -95,9 +94,4 @@ func cleanText(s string) string {
 	}
 	s = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)`).ReplaceAllString(s, `$1`)
 	return strings.Join(strings.Fields(s), " ")
-}
-
-// isSpace reports whether r is whitespace (used with strings.Fields).
-func isSpace(r rune) bool {
-	return unicode.IsSpace(r)
 }

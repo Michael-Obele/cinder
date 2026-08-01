@@ -1,5 +1,15 @@
 basePath: /v1
 definitions:
+  domain.ExtractField:
+    properties:
+      attr:
+        description: '"text" (default), "html", or attribute name'
+        type: string
+      multiple:
+        type: boolean
+      selector:
+        type: string
+    type: object
   domain.ImageData:
     properties:
       alt:
@@ -23,6 +33,10 @@ definitions:
     type: object
   domain.ScrapeResult:
     properties:
+      extracted:
+        additionalProperties: {}
+        description: Extracted holds deterministic schema-extraction results.
+        type: object
       html:
         type: string
       images:
@@ -39,6 +53,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/domain.ScreenshotData'
         description: Image fields (omitted when not requested)
+      summary:
+        description: Summary holds the extractive summary when requested.
+        type: string
       url:
         type: string
     type: object
@@ -61,12 +78,71 @@ definitions:
       width:
         type: integer
     type: object
+  handlers.ActionReq:
+    properties:
+      ms:
+        type: integer
+      selector:
+        type: string
+      type:
+        type: string
+    type: object
+  handlers.BatchRequest:
+    properties:
+      urls:
+        items:
+          type: string
+        maxItems: 20
+        minItems: 1
+        type: array
+    required:
+    - urls
+    type: object
+  handlers.BatchResponse:
+    properties:
+      batch_id:
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/handlers.BatchTask'
+        type: array
+    type: object
+  handlers.BatchStatusResponse:
+    properties:
+      batch_id:
+        type: string
+      completed:
+        type: integer
+      failed:
+        type: integer
+      tasks:
+        items:
+          $ref: '#/definitions/handlers.BatchTask'
+        type: array
+      total:
+        type: integer
+    type: object
+  handlers.BatchTask:
+    properties:
+      id:
+        type: string
+      url:
+        type: string
+    type: object
   handlers.CrawlRequest:
     properties:
+      exclude_paths:
+        items:
+          type: string
+        type: array
       image_format:
         type: string
       images:
         type: boolean
+      include_paths:
+        items:
+          type: string
+        type: array
       limit:
         type: integer
       maxDepth:
@@ -76,6 +152,10 @@ definitions:
       screenshot:
         type: boolean
       url:
+        type: string
+      webhook_secret:
+        type: string
+      webhook_url:
         type: string
     required:
     - url
@@ -99,11 +179,81 @@ definitions:
       url:
         type: string
     type: object
+  handlers.ImageProcessReq:
+    properties:
+      format:
+        description: '"jpeg" (default) or "png"'
+        type: string
+      max_width:
+        type: integer
+      quality:
+        type: integer
+    type: object
+  handlers.MapRequest:
+    properties:
+      limit:
+        description: default 100, max 5000
+        type: integer
+      search:
+        description: optional substring filter
+        type: string
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  handlers.MapResponse:
+    properties:
+      count:
+        type: integer
+      links:
+        items:
+          $ref: '#/definitions/sitemap.DiscoveredURL'
+        type: array
+      url:
+        type: string
+    type: object
+  handlers.MonitorRequest:
+    properties:
+      interval_seconds:
+        type: integer
+      url:
+        type: string
+      webhook_secret:
+        type: string
+      webhook_url:
+        type: string
+    required:
+    - url
+    type: object
+  handlers.MonitorResponse:
+    properties:
+      id:
+        type: string
+      interval_seconds:
+        type: integer
+      next_check:
+        type: string
+      url:
+        type: string
+    type: object
   handlers.ScrapeRequest:
     properties:
+      actions:
+        items:
+          $ref: '#/definitions/handlers.ActionReq'
+        type: array
+      block_ads:
+        type: boolean
+      extract_schema:
+        additionalProperties:
+          $ref: '#/definitions/domain.ExtractField'
+        type: object
       image_format:
         description: '"url" or "blob"'
         type: string
+      image_process:
+        $ref: '#/definitions/handlers.ImageProcessReq'
       images:
         type: boolean
       max_image_size_kb:
@@ -113,15 +263,40 @@ definitions:
       mode:
         description: '"smart", "static", "dynamic"'
         type: string
+      redact_pii:
+        type: boolean
+      remove_base64_images:
+        type: boolean
       render:
         description: 'Deprecated: usage ignores Mode if true'
         type: boolean
       screenshot:
         type: boolean
+      screenshot_opts:
+        $ref: '#/definitions/handlers.ScreenshotOpts'
+      summary:
+        type: boolean
+      summary_sentences:
+        type: integer
       url:
         type: string
     required:
     - url
+    type: object
+  handlers.ScreenshotOpts:
+    properties:
+      format:
+        type: string
+      full_page:
+        type: boolean
+      height:
+        type: integer
+      quality:
+        type: integer
+      wait_selector:
+        type: string
+      width:
+        type: integer
     type: object
   handlers.SearchRequest:
     properties:
@@ -180,12 +355,77 @@ definitions:
       url:
         type: string
     type: object
+  sitemap.DiscoveredURL:
+    properties:
+      source:
+        description: '"sitemap" or "link"'
+        type: string
+      url:
+        type: string
+    type: object
 info:
   contact: {}
   description: Web scraping, crawling, and AI data extraction API.
   title: Cinder API
   version: "1.0"
 paths:
+  /batch/{id}:
+    get:
+      description: Aggregates the Asynq state of every task in the batch.
+      parameters:
+      - description: The batch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.BatchStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get the status of a batch scrape
+      tags:
+      - batch
+  /batch/scrape:
+    post:
+      consumes:
+      - application/json
+      description: Enqueues one scrape task per URL and returns a batch ID for status
+        polling.
+      parameters:
+      - description: JSON request body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.BatchRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/handlers.BatchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Scrape multiple URLs asynchronously
+      tags:
+      - batch
   /crawl:
     post:
       consumes:
@@ -246,6 +486,117 @@ paths:
       summary: Get the status of an asynchronous crawl
       tags:
       - crawl
+  /map:
+    post:
+      consumes:
+      - application/json
+      description: Discovers URLs for a site via robots.txt/sitemap.xml, falling back
+        to link discovery. Returns up to limit URLs, optionally filtered by search.
+      parameters:
+      - description: JSON request body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.MapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Map a website's URLs
+      tags:
+      - map
+  /monitor:
+    post:
+      consumes:
+      - application/json
+      description: Scrapes the URL on an interval, hashes the markdown, and fires
+        a webhook when content changes. First check records the baseline.
+      parameters:
+      - description: JSON request body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.MonitorRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.MonitorResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a change-tracking monitor
+      tags:
+      - monitor
+  /monitor/{id}:
+    delete:
+      description: Stops monitoring and removes the monitor record.
+      parameters:
+      - description: The monitor ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a monitor
+      tags:
+      - monitor
+    get:
+      description: Returns the monitor configuration, last content hash, and next
+        check time.
+      parameters:
+      - description: The monitor ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get monitor status
+      tags:
+      - monitor
   /scrape:
     get:
       consumes:

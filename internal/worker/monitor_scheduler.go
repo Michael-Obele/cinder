@@ -25,7 +25,7 @@ func NewRedisKV(client *redis.Client) *RedisKV {
 func (k *RedisKV) Get(ctx context.Context, key string) (string, error) {
 	val, err := k.client.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
-		return "", kvNotFound
+		return "", errNotFound
 	}
 	return val, err
 }

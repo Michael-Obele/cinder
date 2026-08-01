@@ -36,16 +36,25 @@
 
 ## Phase 4: Polish & Auth
 
-- [ ] **Middleware**: Implement `APIKeyAuth` middleware in `internal/api/middleware/auth.go`.
-- [ ] **Apply Middleware**: Protect `/v1/*` routes in `router.go`.
-- [ ] **Rate Limiting**: Add `gin-contrib/rate` or custom Redis rate limiter.
-- [ ] **Cleanup**: Ensure `defer cancel()` is called on all contexts to prevent memory leaks.
-- [ ] **Documentation**: Generate Swagger/OpenAPI spec if needed.
+- [x] **Middleware**: Implement `APIKeyAuth` middleware in `internal/api/middleware/auth.go`.
+- [x] **Apply Middleware**: Protect `/v1/*` routes in `router.go`.
+- [x] **Rate Limiting**: Per-client Redis (or in-memory) limiter via `RATE_LIMIT_RPM`.
+- [x] **Cleanup**: Ensure `defer cancel()` is called on all contexts to prevent memory leaks.
+- [x] **Documentation**: Generate Swagger/OpenAPI spec if needed.
 
 ## Phase 5: High Performance & Reliability (Leapcell/Upstash)
 
-- [ ] **Refactor Scraper**: Move `chromedp` Allocator to a specific Service/Singleton to reuse the browser process.
-- [ ] **Tuning**: Increase Worker concurrency to `5+` and reduce Asynq polling interval (`1s`).
-- [ ] **Smart Waiting**: Implement `WaitVisible` or Network Idle detection in `chromedp.go`.
-- [ ] **Stability**: Implement periodic browser restarts (every ~100 scrapes) to prevent memory leaks.
-- [ ] **Resilience**: Tune Redis timeouts for high-latency environments.
+- [x] **Refactor Scraper**: Move `chromedp` Allocator to a specific Service/Singleton to reuse the browser process.
+- [x] **Tuning**: Parallel crawl pool (`CRAWL_CONCURRENCY`) and per-domain politeness (`CRAWL_DOMAIN_DELAY`).
+- [x] **Smart Waiting**: Page actions (`wait_ms`, `wait_selector`) + settle loop for `scroll_to_bottom`.
+- [x] **Stability**: Periodic browser restarts (`CHROME_RECYCLE_AFTER`, default 100) to prevent memory leaks.
+- [x] **Resilience**: Tune Redis timeouts for high-latency environments.
+
+## Phase 6: Cinder v2 Feature Sprint (2026-08-01)
+
+- [x] **Core Quality**: readability main-content extraction, full-options cache keys, ScreenshotOptions, UA rotation, parallel blob fetch, browser recycling.
+- [x] **Image Engine v2**: srcset/lazy/picture extraction, optimizer unwrap, quality ranking, dimension sniffing, resize/re-encode.
+- [x] **Crawl v2**: parallel workers, per-domain politeness, retry policy (4xx skip), include/exclude patterns, signed webhooks.
+- [x] **Discovery & Endpoints**: `/v1/map`, `/v1/batch/scrape`, page actions.
+- [x] **Intelligence (no LLM)**: deterministic schema extraction, extractive summary, PII redaction, change-tracking monitors, ad/base64 defaults.
+- [x] **Hardening**: API-key auth + rate limiting (Phase 4 closed).

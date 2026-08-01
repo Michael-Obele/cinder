@@ -30,7 +30,7 @@ func (m *memKV) Get(ctx context.Context, key string) (string, error) {
 	if v, ok := m.data[key]; ok {
 		return v, nil
 	}
-	return "", kvNotFound
+	return "", errNotFound
 }
 
 func (m *memKV) Set(ctx context.Context, key, value string) error {
@@ -75,12 +75,6 @@ func (m *mutableScraper) Scrape(ctx context.Context, url string, opts domain.Scr
 		HTML:     "<html><body>" + m.markdown + "</body></html>",
 		Metadata: map[string]string{"engine": "mock"},
 	}, nil
-}
-
-func (m *mutableScraper) set(md string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.markdown = md
 }
 
 // TestMonitorCheck_BaselineStoresHash verifies the first check stores a

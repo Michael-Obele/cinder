@@ -15,6 +15,90 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/batch/scrape": {
+            "post": {
+                "description": "Enqueues one scrape task per URL and returns a batch ID for status polling.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "batch"
+                ],
+                "summary": "Scrape multiple URLs asynchronously",
+                "parameters": [
+                    {
+                        "description": "JSON request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.BatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.BatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/batch/{id}": {
+            "get": {
+                "description": "Aggregates the Asynq state of every task in the batch.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "batch"
+                ],
+                "summary": "Get the status of a batch scrape",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The batch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.BatchStatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/crawl": {
             "post": {
                 "description": "Submits a URL to be crawled asynchronously. The crawler performs BFS link-following up to maxDepth, scraping up to limit pages on the same domain. Requires Redis.",
@@ -92,6 +176,167 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Task not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/map": {
+            "post": {
+                "description": "Discovers URLs for a site via robots.txt/sitemap.xml, falling back to link discovery. Returns up to limit URLs, optionally filtered by search.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "map"
+                ],
+                "summary": "Map a website's URLs",
+                "parameters": [
+                    {
+                        "description": "JSON request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/monitor": {
+            "post": {
+                "description": "Scrapes the URL on an interval, hashes the markdown, and fires a webhook when content changes. First check records the baseline.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Create a change-tracking monitor",
+                "parameters": [
+                    {
+                        "description": "JSON request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MonitorRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MonitorResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/monitor/{id}": {
+            "get": {
+                "description": "Returns the monitor configuration, last content hash, and next check time.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get monitor status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The monitor ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Stops monitoring and removes the monitor record.",
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Delete a monitor",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The monitor ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -430,6 +675,21 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "domain.ExtractField": {
+            "type": "object",
+            "properties": {
+                "attr": {
+                    "description": "\"text\" (default), \"html\", or attribute name",
+                    "type": "string"
+                },
+                "multiple": {
+                    "type": "boolean"
+                },
+                "selector": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.ImageData": {
             "type": "object",
             "properties": {
@@ -465,6 +725,11 @@ const docTemplate = `{
         "domain.ScrapeResult": {
             "type": "object",
             "properties": {
+                "extracted": {
+                    "description": "Extracted holds deterministic schema-extraction results.",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "html": {
                     "type": "string"
                 },
@@ -490,6 +755,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/domain.ScreenshotData"
                         }
                     ]
+                },
+                "summary": {
+                    "description": "Summary holds the extractive summary when requested.",
+                    "type": "string"
                 },
                 "url": {
                     "type": "string"
@@ -525,17 +794,107 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ActionReq": {
+            "type": "object",
+            "properties": {
+                "ms": {
+                    "type": "integer"
+                },
+                "selector": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.BatchRequest": {
+            "type": "object",
+            "required": [
+                "urls"
+            ],
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "handlers.BatchResponse": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.BatchTask"
+                    }
+                }
+            }
+        },
+        "handlers.BatchStatusResponse": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.BatchTask"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.BatchTask": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.CrawlRequest": {
             "type": "object",
             "required": [
                 "url"
             ],
             "properties": {
+                "exclude_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "image_format": {
                     "type": "string"
                 },
                 "images": {
                     "type": "boolean"
+                },
+                "include_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "limit": {
                     "type": "integer"
@@ -550,6 +909,12 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "url": {
+                    "type": "string"
+                },
+                "webhook_secret": {
+                    "type": "string"
+                },
+                "webhook_url": {
                     "type": "string"
                 }
             }
@@ -583,15 +948,121 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ImageProcessReq": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "description": "\"jpeg\" (default) or \"png\"",
+                    "type": "string"
+                },
+                "max_width": {
+                    "type": "integer"
+                },
+                "quality": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.MapRequest": {
+            "type": "object",
+            "required": [
+                "url"
+            ],
+            "properties": {
+                "limit": {
+                    "description": "default 100, max 5000",
+                    "type": "integer"
+                },
+                "search": {
+                    "description": "optional substring filter",
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.MapResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/sitemap.DiscoveredURL"
+                    }
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.MonitorRequest": {
+            "type": "object",
+            "required": [
+                "url"
+            ],
+            "properties": {
+                "interval_seconds": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "webhook_secret": {
+                    "type": "string"
+                },
+                "webhook_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.MonitorResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "interval_seconds": {
+                    "type": "integer"
+                },
+                "next_check": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.ScrapeRequest": {
             "type": "object",
             "required": [
                 "url"
             ],
             "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.ActionReq"
+                    }
+                },
+                "block_ads": {
+                    "type": "boolean"
+                },
+                "extract_schema": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/domain.ExtractField"
+                    }
+                },
                 "image_format": {
                     "description": "\"url\" or \"blob\"",
                     "type": "string"
+                },
+                "image_process": {
+                    "$ref": "#/definitions/handlers.ImageProcessReq"
                 },
                 "images": {
                     "type": "boolean"
@@ -606,6 +1077,12 @@ const docTemplate = `{
                     "description": "\"smart\", \"static\", \"dynamic\"",
                     "type": "string"
                 },
+                "redact_pii": {
+                    "type": "boolean"
+                },
+                "remove_base64_images": {
+                    "type": "boolean"
+                },
                 "render": {
                     "description": "Deprecated: usage ignores Mode if true",
                     "type": "boolean"
@@ -613,8 +1090,40 @@ const docTemplate = `{
                 "screenshot": {
                     "type": "boolean"
                 },
+                "screenshot_opts": {
+                    "$ref": "#/definitions/handlers.ScreenshotOpts"
+                },
+                "summary": {
+                    "type": "boolean"
+                },
+                "summary_sentences": {
+                    "type": "integer"
+                },
                 "url": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.ScreenshotOpts": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "type": "string"
+                },
+                "full_page": {
+                    "type": "boolean"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "quality": {
+                    "type": "integer"
+                },
+                "wait_selector": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },
@@ -698,6 +1207,18 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "sitemap.DiscoveredURL": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "description": "\"sitemap\" or \"link\"",
                     "type": "string"
                 },
                 "url": {
