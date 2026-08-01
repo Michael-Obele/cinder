@@ -5,6 +5,7 @@ package main
 // @description     Web scraping, crawling, and AI data extraction API.
 // @BasePath        /v1
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,8 +22,17 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func main() {
-	// 1. Load Config
+// mustRedisOpt builds the asynq Redis option for the monitor scheduler's
+// enqueuer, panicking only when the URL is unparseable (already validated).
+func mustRedisOpt(cfg *config.Config) asynq.RedisClientOpt {
+	opt, err := worker.RedisClientOpt(cfg.Redis.URL)
+	if err != nil {
+		panic(err)
+	}
+	return opt
+}
+
+func main() { // 1. Load Config
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
@@ -88,6 +98,12 @@ func main() {
 				workerServer := worker.NewServer(cfg, logger.Log)
 				mux := asynq.NewServeMux()
 				worker.RegisterHandlers(mux, scraperService, logger.Log)
+
+				// Change-tracking monitors: register handler + scheduler.
+				monitorKV := worker.NewRedisKV(redisClient)
+				worker.RegisterMonitorHandler(mux, scraperService, monitorKV, logger.Log)
+				monitorClient := asynq.NewClient(mustRedisOpt(cfg))
+				go worker.StartMonitorScheduler(context.Background(), monitorKV, monitorClient, scraperService, logger.Log)
 
 				go func() {
 					if err := workerServer.Run(mux); err != nil {

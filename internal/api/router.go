@@ -72,6 +72,15 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 			} else {
 				logger.Warn("Batch scraping disabled", "error", err)
 			}
+
+			// Change-tracking monitors also require Redis.
+			if monitorHandler, err := handlers.NewMonitorHandler(cfg.Redis.URL); err == nil {
+				v1.POST("/monitor", monitorHandler.CreateMonitor)
+				v1.GET("/monitor/:id", monitorHandler.GetMonitor)
+				v1.DELETE("/monitor/:id", monitorHandler.DeleteMonitor)
+			} else {
+				logger.Warn("Monitor endpoints disabled", "error", err)
+			}
 		} else {
 			// Return 503 Service Unavailable for crawl endpoints when Redis is not available
 			v1.POST("/crawl", func(c *gin.Context) {

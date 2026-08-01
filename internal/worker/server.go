@@ -38,26 +38,28 @@ func (l *AsynqLogger) Fatal(args ...interface{}) {
 	os.Exit(1)
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
-	redisURL := cfg.Redis.URL
+// RedisClientOpt builds an asynq.RedisClientOpt from a redis:// or
+// rediss:// URL, including TLS config for the latter.
+func RedisClientOpt(redisURL string) (asynq.RedisClientOpt, error) {
 	u, err := url.Parse(redisURL)
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse redis url: %v", err))
+		return asynq.RedisClientOpt{}, fmt.Errorf("failed to parse redis url: %w", err)
 	}
-
 	password, _ := u.User.Password()
-	addr := u.Host
-
-	redisOpt := asynq.RedisClientOpt{
-		Addr:     addr,
-		Password: password,
-	}
-
+	opt := asynq.RedisClientOpt{Addr: u.Host, Password: password}
 	if u.Scheme == "rediss" {
-		redisOpt.TLSConfig = &tls.Config{
+		opt.TLSConfig = &tls.Config{
 			InsecureSkipVerify: false,
 			MinVersion:         tls.VersionTLS12,
 		}
+	}
+	return opt, nil
+}
+
+func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
+	redisOpt, err := RedisClientOpt(cfg.Redis.URL)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse redis url: %v", err))
 	}
 
 	srv := asynq.NewServer(
@@ -85,4 +87,12 @@ func RegisterHandlers(mux *asynq.ServeMux, scraper *scraper.Service, logger *slo
 
 	crawlHandler := NewCrawlTaskHandler(scraper, logger)
 	mux.HandleFunc(TypeCrawl, crawlHandler.ProcessTask)
+}
+
+// RegisterMonitorHandler registers the monitor:check task handler and
+// returns the handler (its KV is needed by the scheduler).
+func RegisterMonitorHandler(mux *asynq.ServeMux, scraper *scraper.Service, kv KV, logger *slog.Logger) *MonitorTaskHandler {
+	handler := NewMonitorTaskHandler(scraper, kv, logger)
+	mux.HandleFunc(TypeMonitorCheck, handler.ProcessTask)
+	return handler
 }
