@@ -244,5 +244,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		"metadata":   result.Metadata,
 		"screenshot": result.Screenshot,
 		"images":     result.Images,
+		"extracted":  result.Extracted,
+		"summary":    result.Summary,
 	})
 }

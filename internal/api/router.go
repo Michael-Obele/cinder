@@ -34,9 +34,12 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 			"status":  "ok",
 			"docs":    "/swagger/index.html",
 			"endpoints": gin.H{
-				"scrape": "/v1/scrape",
-				"search": "/v1/search",
-				"crawl":  "/v1/crawl",
+				"scrape":  "/v1/scrape",
+				"search":  "/v1/search",
+				"crawl":   "/v1/crawl",
+				"map":     "/v1/map",
+				"batch":   "/v1/batch/scrape",
+				"monitor": "/v1/monitor",
 			},
 		})
 	})
