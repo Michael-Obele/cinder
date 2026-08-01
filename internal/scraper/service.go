@@ -16,6 +16,7 @@ import (
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/image"
 	"github.com/standard-user/cinder/pkg/logger"
+	"golang.org/x/sync/errgroup"
 )
 
 // Service acts as the main entry point and chooses the right scraper
@@ -172,23 +173,41 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		}
 		result.Images = image.ExtractPageImages(result.HTML, url, maxImages)
 
-		// Fetch and encode each image if blob format requested
+		// Fetch and encode each image if blob format requested.
+		// Fetches run concurrently (bounded) to avoid N serial round trips;
+		// per-image failures are logged and skipped, preserving the response.
 		if opts.ImageFormat == domain.ImageFormatBlob && len(result.Images) > 0 {
 			proc := image.NewProcessor()
-			for i, img := range result.Images {
+			maxBytes := int64(opts.MaxImageSizeKB) * 1024
+
+			g, gctx := errgroup.WithContext(ctx)
+			g.SetLimit(5)
+			for i := range result.Images {
+				img := &result.Images[i]
 				if img.URL == "" {
 					continue
 				}
-				blob, fetchErr := proc.FetchAndEncode(img.URL)
-				if fetchErr != nil {
-					logger.Log.Warn("Failed to fetch image for blob", "url", img.URL, "error", fetchErr)
-					continue
-				}
-				result.Images[i].Blob = blob.DataURI
-				if strings.HasPrefix(blob.MimeType, "image/") {
-					result.Images[i].Format = strings.TrimPrefix(blob.MimeType, "image/")
-				}
-				result.Images[i].SizeBytes = int64(len(blob.RawBytes))
+				g.Go(func() error {
+					blob, fetchErr := proc.FetchAndEncodeLimit(img.URL, maxBytes)
+					if fetchErr != nil {
+						// Context cancellation is real; everything else is a
+						// per-image skip.
+						if gctx.Err() != nil {
+							return fetchErr
+						}
+						logger.Log.Warn("Failed to fetch image for blob", "url", img.URL, "error", fetchErr)
+						return nil
+					}
+					img.Blob = blob.DataURI
+					if strings.HasPrefix(blob.MimeType, "image/") {
+						img.Format = strings.TrimPrefix(blob.MimeType, "image/")
+					}
+					img.SizeBytes = int64(len(blob.RawBytes))
+					return nil
+				})
+			}
+			if gerr := g.Wait(); gerr != nil {
+				return nil, fmt.Errorf("image fetch aborted: %w", gerr)
 			}
 		}
 	}

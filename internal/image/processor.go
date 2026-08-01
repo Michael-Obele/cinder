@@ -72,8 +72,17 @@ func DecodeDataURI(dataURI string) ([]byte, string, error) {
 
 // FetchAndEncode downloads an image URL and returns it as BlobData.
 func (p *Processor) FetchAndEncode(imageURL string) (*domain.BlobData, error) {
+	return p.FetchAndEncodeLimit(imageURL, MaxImageSize)
+}
+
+// FetchAndEncodeLimit downloads an image URL with a caller-supplied size cap
+// in bytes (<= 0 falls back to MaxImageSize) and returns it as BlobData.
+func (p *Processor) FetchAndEncodeLimit(imageURL string, maxBytes int64) (*domain.BlobData, error) {
 	if !IsValidImageURL(imageURL) {
 		return nil, fmt.Errorf("invalid image URL: %s", imageURL)
+	}
+	if maxBytes <= 0 {
+		maxBytes = MaxImageSize
 	}
 
 	resp, err := p.client.Get(imageURL)
@@ -87,13 +96,13 @@ func (p *Processor) FetchAndEncode(imageURL string) (*domain.BlobData, error) {
 	}
 
 	// Enforce size limit via LimitReader
-	limitedReader := io.LimitReader(resp.Body, MaxImageSize+1)
+	limitedReader := io.LimitReader(resp.Body, maxBytes+1)
 	data, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, fmt.Errorf("read failed: %w", err)
 	}
-	if int64(len(data)) > MaxImageSize {
-		return nil, fmt.Errorf("image exceeded size limit (%d bytes max)", MaxImageSize)
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("image exceeded size limit (%d bytes max)", maxBytes)
 	}
 
 	// Detect MIME type
