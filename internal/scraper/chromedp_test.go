@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 
@@ -39,6 +40,73 @@ func TestResolveScreenshotParams_IgnoresBadFormat(t *testing.T) {
 	p := resolveScreenshotParams(&domain.ScreenshotOptions{Format: "bmp"})
 	if p.format != "jpeg" {
 		t.Errorf("unknown format should fall back to jpeg, got %q", p.format)
+	}
+}
+
+func TestBuildActionSteps_UnknownType(t *testing.T) {
+	if _, err := buildActionSteps(domain.Action{Type: "explode"}); err == nil {
+		t.Error("expected error for unknown action type")
+	}
+}
+
+func TestBuildActionSteps_WaitSelectorRequiresSelector(t *testing.T) {
+	if _, err := buildActionSteps(domain.Action{Type: "wait_selector"}); err == nil {
+		t.Error("expected error for missing selector")
+	}
+}
+
+func TestBuildActionSteps_ClickRequiresSelector(t *testing.T) {
+	if _, err := buildActionSteps(domain.Action{Type: "click"}); err == nil {
+		t.Error("expected error for missing selector")
+	}
+}
+
+func TestBuildActionSteps_WaitMs(t *testing.T) {
+	steps, err := buildActionSteps(domain.Action{Type: "wait_ms", Ms: 250})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(steps) != 1 {
+		t.Errorf("expected 1 step, got %d", len(steps))
+	}
+}
+
+func TestBuildActionSteps_ScrollToBottom(t *testing.T) {
+	steps, err := buildActionSteps(domain.Action{Type: "scroll_to_bottom"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(steps) != 1 {
+		t.Errorf("expected 1 step, got %d", len(steps))
+	}
+}
+
+// TestService_RejectsActionsInStaticMode verifies actions force dynamic mode
+// and error out when static is explicitly requested.
+func TestService_RejectsActionsInStaticMode(t *testing.T) {
+	svc := NewService(nil, nil, nil)
+	_, err := svc.Scrape(context.Background(), "https://example.com", "static", domain.ScrapeOptions{
+		Actions: []domain.Action{{Type: "wait_ms", Ms: 10}},
+	})
+	if err == nil {
+		t.Error("expected error for actions in static mode")
+	}
+}
+
+// TestService_ActionsForceDynamicMode verifies actions upgrade smart to dynamic.
+func TestService_ActionsForceDynamicMode(t *testing.T) {
+	colly := &mockScraper{err: fmt.Errorf("should not be called")}
+	chromedp := &mockScraper{result: newMockResult("chromedp")}
+	svc := NewService(colly, chromedp, nil)
+
+	result, err := svc.Scrape(context.Background(), "https://example.com", "smart", domain.ScrapeOptions{
+		Actions: []domain.Action{{Type: "wait_ms", Ms: 10}},
+	})
+	if err != nil {
+		t.Fatalf("scrape failed: %v", err)
+	}
+	if result.Metadata["engine"] != "chromedp" {
+		t.Errorf("actions should force dynamic engine, got %q", result.Metadata["engine"])
 	}
 }
 

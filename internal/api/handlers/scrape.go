@@ -22,6 +22,7 @@ type ScrapeRequest struct {
 	MaxImages      int              `json:"max_images"`
 	MaxImageSizeKB int              `json:"max_image_size_kb"`
 	ImageProcess   *ImageProcessReq `json:"image_process,omitempty"`
+	Actions        []ActionReq      `json:"actions,omitempty"`
 }
 
 // ScreenshotOpts is the wire format for screenshot configuration.
@@ -39,6 +40,13 @@ type ImageProcessReq struct {
 	Format   string `json:"format,omitempty"` // "jpeg" (default) or "png"
 	MaxWidth int    `json:"max_width,omitempty"`
 	Quality  int    `json:"quality,omitempty"`
+}
+
+// ActionReq is the wire format for a page action.
+type ActionReq struct {
+	Type     string `json:"type"`
+	Selector string `json:"selector,omitempty"`
+	Ms       int    `json:"ms,omitempty"`
 }
 
 type ScrapeHandler struct {
@@ -76,6 +84,18 @@ func mapImageProcess(in *ImageProcessReq) *domain.ImageProcessOptions {
 		MaxWidth: in.MaxWidth,
 		Quality:  in.Quality,
 	}
+}
+
+// mapActions converts wire-format actions into domain actions.
+func mapActions(in []ActionReq) []domain.Action {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]domain.Action, 0, len(in))
+	for _, a := range in {
+		out = append(out, domain.Action{Type: a.Type, Selector: a.Selector, Ms: a.Ms})
+	}
+	return out
 }
 
 // wordCount returns the number of whitespace-delimited words in the given text.
@@ -189,6 +209,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		MaxImages:      req.MaxImages,
 		MaxImageSizeKB: req.MaxImageSizeKB,
 		ImageProcess:   mapImageProcess(req.ImageProcess),
+		Actions:        mapActions(req.Actions),
 	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)

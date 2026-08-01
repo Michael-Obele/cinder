@@ -118,6 +118,61 @@ func (s *ChromedpScraper) recycleLocked() {
 	logger.Log.Info("Chrome allocator recycled to bound memory growth")
 }
 
+// maxScrollSettleIterations bounds the scroll_to_bottom settle loop.
+const maxScrollSettleIterations = 10
+
+// buildActionSteps converts a page action into chromedp steps.
+func buildActionSteps(a domain.Action) ([]chromedp.Action, error) {
+	switch a.Type {
+	case "wait_ms":
+		ms := a.Ms
+		if ms <= 0 {
+			ms = 500
+		}
+		return []chromedp.Action{chromedp.Sleep(time.Duration(ms) * time.Millisecond)}, nil
+	case "wait_selector":
+		if a.Selector == "" {
+			return nil, fmt.Errorf("wait_selector requires a selector")
+		}
+		return []chromedp.Action{chromedp.WaitVisible(a.Selector, chromedp.ByQuery)}, nil
+	case "click":
+		if a.Selector == "" {
+			return nil, fmt.Errorf("click requires a selector")
+		}
+		return []chromedp.Action{chromedp.Click(a.Selector, chromedp.NodeVisible)}, nil
+	case "scroll_down":
+		return []chromedp.Action{chromedp.Evaluate(`window.scrollBy(0, window.innerHeight)`, nil)}, nil
+	case "scroll_to_bottom":
+		// Scroll with a settle loop so lazy-loaded content has time to
+		// render before capture.
+		return []chromedp.Action{chromedp.ActionFunc(func(ctx context.Context) error {
+			for i := 0; i < maxScrollSettleIterations; i++ {
+				var scrollY, scrollHeight int
+				if err := chromedp.Evaluate(`window.scrollY`, &scrollY).Do(ctx); err != nil {
+					return err
+				}
+				if err := chromedp.Evaluate(`document.body.scrollHeight`, &scrollHeight).Do(ctx); err != nil {
+					return err
+				}
+				if scrollY >= scrollHeight {
+					return nil
+				}
+				if err := chromedp.Evaluate(`window.scrollTo(0, document.body.scrollHeight)`, nil).Do(ctx); err != nil {
+					return err
+				}
+				select {
+				case <-time.After(500 * time.Millisecond):
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return nil
+		})}, nil
+	default:
+		return nil, fmt.Errorf("unknown action type %q", a.Type)
+	}
+}
+
 func (s *ChromedpScraper) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -188,19 +243,36 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 
 	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
-	// Navigate and capture HTML first.
-	// Rotate the User-Agent per tab for anti-detection (mirrors colly).
-	// Use Evaluate instead of OuterHTML to avoid stale node references
-	// on SPAs that replace the DOM after the initial page load.
+	// Navigate first, then run any requested page actions, then capture.
 	err := chromedp.Run(taskCtx,
 		emulation.SetUserAgentOverride(gofakeit.UserAgent()),
 		chromedp.Navigate(url),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
-		chromedp.Evaluate(`document.documentElement.outerHTML`, &htmlContent),
 	)
-
 	if err != nil {
-		return nil, fmt.Errorf("chromedp failed: %w", err)
+		return nil, fmt.Errorf("chromedp navigation failed: %w", err)
+	}
+
+	// Page actions (wait/click/scroll) run before HTML capture so
+	// interaction-driven content is included.
+	if len(opts.Actions) > 0 {
+		var steps []chromedp.Action
+		for i, a := range opts.Actions {
+			as, err := buildActionSteps(a)
+			if err != nil {
+				return nil, fmt.Errorf("action %d invalid: %w", i, err)
+			}
+			steps = append(steps, as...)
+		}
+		if err := chromedp.Run(taskCtx, steps...); err != nil {
+			logger.Log.Warn("Page actions failed, continuing with current DOM", "url", url, "error", err)
+		}
+	}
+
+	// Use Evaluate instead of OuterHTML to avoid stale node references
+	// on SPAs that replace the DOM after the initial page load.
+	if err := chromedp.Run(taskCtx, chromedp.Evaluate(`document.documentElement.outerHTML`, &htmlContent)); err != nil {
+		return nil, fmt.Errorf("chromedp HTML capture failed: %w", err)
 	}
 
 	// If screenshot is requested, do it in a separate Run call so the

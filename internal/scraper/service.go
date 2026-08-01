@@ -57,6 +57,17 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		mode = "smart"
 	}
 
+	// Page actions require a real browser: force dynamic mode.
+	if len(opts.Actions) > 0 {
+		switch mode {
+		case "dynamic":
+		case "static":
+			return nil, fmt.Errorf("actions require dynamic mode (got static)")
+		default:
+			mode = "dynamic"
+		}
+	}
+
 	// 1. Try Cache
 	cacheKey := cacheKeyFor(url, mode, opts)
 	if s.redis != nil {

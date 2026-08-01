@@ -22,6 +22,16 @@ type ScrapeOptions struct {
 	MaxImages      int                  `json:"max_images,omitempty"`
 	MaxImageSizeKB int                  `json:"max_image_size_kb,omitempty"`
 	ImageProcess   *ImageProcessOptions `json:"image_process,omitempty"`
+	Actions        []Action             `json:"actions,omitempty"`
+}
+
+// Action is a single page interaction executed before content capture
+// (dynamic mode only). Supported types: wait_ms, wait_selector, click,
+// scroll_down, scroll_to_bottom.
+type Action struct {
+	Type     string `json:"type"`
+	Selector string `json:"selector,omitempty"`
+	Ms       int    `json:"ms,omitempty"`
 }
 
 type Scraper interface {
