@@ -53,3 +53,10 @@ const (
 	ImageFormatURL  ImageTransportFormat = "url"
 	ImageFormatBlob ImageTransportFormat = "blob"
 )
+
+// ImageProcessOptions configures optional image resizing/re-encoding.
+type ImageProcessOptions struct {
+	Format   string `json:"format,omitempty"`    // "jpeg" (default) or "png"
+	MaxWidth int    `json:"max_width,omitempty"` // 0 = no resize
+	Quality  int    `json:"quality,omitempty"`   // 1-100, 0 = default 80
+}

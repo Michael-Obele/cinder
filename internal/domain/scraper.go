@@ -21,6 +21,7 @@ type ScrapeOptions struct {
 	ScreenshotOpts *ScreenshotOptions   `json:"screenshot_opts,omitempty"`
 	MaxImages      int                  `json:"max_images,omitempty"`
 	MaxImageSizeKB int                  `json:"max_image_size_kb,omitempty"`
+	ImageProcess   *ImageProcessOptions `json:"image_process,omitempty"`
 }
 
 type Scraper interface {

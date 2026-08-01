@@ -12,15 +12,16 @@ import (
 )
 
 type ScrapeRequest struct {
-	URL            string          `json:"url" binding:"required,url"`
-	Render         bool            `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode           string          `json:"mode"`   // "smart", "static", "dynamic"
-	Screenshot     bool            `json:"screenshot"`
-	ScreenshotOpts *ScreenshotOpts `json:"screenshot_opts,omitempty"`
-	Images         bool            `json:"images"`
-	ImageFormat    string          `json:"image_format"` // "url" or "blob"
-	MaxImages      int             `json:"max_images"`
-	MaxImageSizeKB int             `json:"max_image_size_kb"`
+	URL            string           `json:"url" binding:"required,url"`
+	Render         bool             `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode           string           `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot     bool             `json:"screenshot"`
+	ScreenshotOpts *ScreenshotOpts  `json:"screenshot_opts,omitempty"`
+	Images         bool             `json:"images"`
+	ImageFormat    string           `json:"image_format"` // "url" or "blob"
+	MaxImages      int              `json:"max_images"`
+	MaxImageSizeKB int              `json:"max_image_size_kb"`
+	ImageProcess   *ImageProcessReq `json:"image_process,omitempty"`
 }
 
 // ScreenshotOpts is the wire format for screenshot configuration.
@@ -31,6 +32,13 @@ type ScreenshotOpts struct {
 	Format       string `json:"format,omitempty"`
 	Quality      int    `json:"quality,omitempty"`
 	WaitSelector string `json:"wait_selector,omitempty"`
+}
+
+// ImageProcessReq is the wire format for image resizing/re-encoding.
+type ImageProcessReq struct {
+	Format   string `json:"format,omitempty"` // "jpeg" (default) or "png"
+	MaxWidth int    `json:"max_width,omitempty"`
+	Quality  int    `json:"quality,omitempty"`
 }
 
 type ScrapeHandler struct {
@@ -54,6 +62,19 @@ func mapScreenshotOpts(in *ScreenshotOpts) *domain.ScreenshotOptions {
 		Format:       in.Format,
 		Quality:      in.Quality,
 		WaitSelector: in.WaitSelector,
+	}
+}
+
+// mapImageProcess converts the wire-format image process options into the
+// domain type, returning nil when nothing was provided.
+func mapImageProcess(in *ImageProcessReq) *domain.ImageProcessOptions {
+	if in == nil {
+		return nil
+	}
+	return &domain.ImageProcessOptions{
+		Format:   in.Format,
+		MaxWidth: in.MaxWidth,
+		Quality:  in.Quality,
 	}
 }
 
@@ -167,6 +188,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 		ImageFormat:    imageFormat,
 		MaxImages:      req.MaxImages,
 		MaxImageSizeKB: req.MaxImageSizeKB,
+		ImageProcess:   mapImageProcess(req.ImageProcess),
 	})
 	if err != nil {
 		logger.Log.Error("Scrape failed", "url", req.URL, "error", err)

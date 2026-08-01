@@ -209,6 +209,28 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 			if gerr := g.Wait(); gerr != nil {
 				return nil, fmt.Errorf("image fetch aborted: %w", gerr)
 			}
+
+			// Optional post-processing: resize/re-encode fetched blobs.
+			if opts.ImageProcess != nil {
+				for i := range result.Images {
+					if result.Images[i].Blob == "" {
+						continue
+					}
+					raw, _, decErr := image.DecodeDataURI(result.Images[i].Blob)
+					if decErr != nil {
+						logger.Log.Warn("Failed to decode image blob for processing", "url", result.Images[i].URL, "error", decErr)
+						continue
+					}
+					processed, mime, procErr := image.Reencode(raw, *opts.ImageProcess)
+					if procErr != nil {
+						logger.Log.Warn("Failed to process image", "url", result.Images[i].URL, "error", procErr)
+						continue
+					}
+					result.Images[i].Blob = image.NewProcessor().EncodeToDataURI(processed, mime)
+					result.Images[i].Format = strings.TrimPrefix(mime, "image/")
+					result.Images[i].SizeBytes = int64(len(processed))
+				}
+			}
 		}
 	}
 

@@ -2,13 +2,13 @@ package image
 
 import (
 	"fmt"
-	"io"
 	stdimg "image"
+	"io"
 
 	// Register codecs for DecodeConfig.
+	_ "golang.org/x/image/webp"
 	_ "image/jpeg"
 	_ "image/png"
-	_ "golang.org/x/image/webp"
 )
 
 // maxSniffBytes caps how many bytes are read to decode image headers.
