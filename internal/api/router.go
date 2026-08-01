@@ -64,6 +64,14 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 		if crawlHandler != nil {
 			v1.POST("/crawl", crawlHandler.EnqueueCrawl)
 			v1.GET("/crawl/:id", crawlHandler.GetCrawlStatus)
+
+			// Batch scrape also requires Redis (Asynq + batch records).
+			if batchHandler, err := handlers.NewBatchHandler(cfg.Redis.URL); err == nil {
+				v1.POST("/batch/scrape", batchHandler.EnqueueBatch)
+				v1.GET("/batch/:id", batchHandler.GetBatchStatus)
+			} else {
+				logger.Warn("Batch scraping disabled", "error", err)
+			}
 		} else {
 			// Return 503 Service Unavailable for crawl endpoints when Redis is not available
 			v1.POST("/crawl", func(c *gin.Context) {
