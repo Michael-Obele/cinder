@@ -123,19 +123,26 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 		return nil, fmt.Errorf("empty response from browser")
 	}
 
-	markdown, err := md.ConvertString(htmlContent)
+	// Extract the main content before markdown conversion so nav/ads/footers
+	// don't pollute the LLM-ready output. Falls back to full HTML on failure.
+	rc, _ := ExtractMainContent(htmlContent, url)
+
+	markdown, err := md.ConvertString(rc.ContentHTML)
 	if err != nil {
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}
+
+	metadata := map[string]string{
+		"scraped_at": time.Now().Format(time.RFC3339),
+		"engine":     "chromedp",
+	}
+	applyReadabilityMetadata(metadata, rc)
 
 	result := &domain.ScrapeResult{
 		URL:      url,
 		Markdown: markdown,
 		HTML:     htmlContent,
-		Metadata: map[string]string{
-			"scraped_at": time.Now().Format(time.RFC3339),
-			"engine":     "chromedp",
-		},
+		Metadata: metadata,
 	}
 
 	if opts.Screenshot && len(screenshotBuf) > 0 {

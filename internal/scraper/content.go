@@ -42,3 +42,20 @@ func mustParseURL(pageURL string) *url.URL {
 	}
 	return u
 }
+
+// applyReadabilityMetadata copies non-empty readability fields into the
+// result metadata map so consumers get title/excerpt/byline/site_name.
+func applyReadabilityMetadata(meta map[string]string, rc *ReadabilityResult) {
+	if rc == nil {
+		return
+	}
+	setMeta := func(key, val string) {
+		if val != "" {
+			meta[key] = val
+		}
+	}
+	setMeta("title", rc.Title)
+	setMeta("excerpt", rc.Excerpt)
+	setMeta("byline", rc.Byline)
+	setMeta("site_name", rc.SiteName)
+}

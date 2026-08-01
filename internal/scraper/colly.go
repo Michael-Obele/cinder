@@ -58,19 +58,26 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 		return nil, fmt.Errorf("empty response")
 	}
 
+	// Extract the main content before markdown conversion so nav/ads/footers
+	// don't pollute the LLM-ready output. Falls back to full HTML on failure.
+	rc, _ := ExtractMainContent(htmlContent, url)
+
 	// Convert to Markdown
-	markdown, err := md.ConvertString(htmlContent)
+	markdown, err := md.ConvertString(rc.ContentHTML)
 	if err != nil {
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}
+
+	metadata := map[string]string{
+		"scraped_at": time.Now().Format(time.RFC3339),
+		"engine":     "colly",
+	}
+	applyReadabilityMetadata(metadata, rc)
 
 	return &domain.ScrapeResult{
 		URL:      url,
 		Markdown: markdown,
 		HTML:     htmlContent, // Optional: might want to toggle this
-		Metadata: map[string]string{
-			"scraped_at": time.Now().Format(time.RFC3339),
-			"engine":     "colly",
-		},
+		Metadata: metadata,
 	}, nil
 }
