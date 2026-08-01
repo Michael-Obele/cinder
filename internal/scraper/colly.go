@@ -40,6 +40,11 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
+		if r != nil && r.StatusCode >= 400 {
+			// Carry the HTTP status so retry policies can skip 4xx.
+			scrapeErr = &StatusError{StatusCode: r.StatusCode, Err: err}
+			return
+		}
 		scrapeErr = fmt.Errorf("scraping failed: %w", err)
 	})
 

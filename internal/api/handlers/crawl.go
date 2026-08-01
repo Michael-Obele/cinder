@@ -14,13 +14,17 @@ import (
 )
 
 type CrawlRequest struct {
-	URL         string `json:"url" binding:"required,url"`
-	Render      bool   `json:"render"`
-	Screenshot  bool   `json:"screenshot"`
-	Images      bool   `json:"images"`
-	ImageFormat string `json:"image_format"`
-	MaxDepth    int    `json:"maxDepth"`
-	Limit       int    `json:"limit"`
+	URL           string   `json:"url" binding:"required,url"`
+	Render        bool     `json:"render"`
+	Screenshot    bool     `json:"screenshot"`
+	Images        bool     `json:"images"`
+	ImageFormat   string   `json:"image_format"`
+	MaxDepth      int      `json:"maxDepth"`
+	Limit         int      `json:"limit"`
+	IncludePaths  []string `json:"include_paths"`
+	ExcludePaths  []string `json:"exclude_paths"`
+	WebhookURL    string   `json:"webhook_url"`
+	WebhookSecret string   `json:"webhook_secret"`
 }
 
 type CrawlResponse struct {
@@ -105,7 +109,12 @@ func (h *CrawlHandler) EnqueueCrawl(c *gin.Context) {
 		req.Limit = 100
 	}
 
-	task, err := worker.NewCrawlTask(req.URL, req.Render, req.Screenshot, req.Images, req.ImageFormat, req.MaxDepth, req.Limit)
+	task, err := worker.NewCrawlTaskWithOptions(req.URL, req.Render, req.Screenshot, req.Images, req.ImageFormat, req.MaxDepth, req.Limit, worker.CrawlOptions{
+		IncludePaths:  req.IncludePaths,
+		ExcludePaths:  req.ExcludePaths,
+		WebhookURL:    req.WebhookURL,
+		WebhookSecret: req.WebhookSecret,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
