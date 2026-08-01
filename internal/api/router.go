@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/standard-user/cinder/internal/api/handlers"
 	"github.com/standard-user/cinder/internal/api/middleware"
 	"github.com/standard-user/cinder/internal/config"
@@ -14,7 +15,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler) *gin.Engine {
+func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler, redisClient *redis.Client) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -51,6 +52,8 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 	}
 
 	v1 := r.Group("/v1")
+	v1.Use(middleware.APIKeyAuth(cfg.App.APIKeys))
+	v1.Use(middleware.RateLimit(cfg.App.RateLimitRPM, redisClient))
 	{
 		v1.POST("/scrape", scrapeHandler.Scrape)
 		v1.GET("/scrape", scrapeHandler.Scrape)

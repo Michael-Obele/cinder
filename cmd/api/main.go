@@ -117,7 +117,7 @@ func main() { // 1. Load Config
 	}
 
 	// 4. Init Router
-	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler, searchHandler)
+	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler, searchHandler, redisClient)
 
 	// 5. Run Server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

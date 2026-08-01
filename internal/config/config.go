@@ -30,6 +30,12 @@ type AppConfig struct {
 	// ChromeRecycleAfter restarts the Chrome allocator after this many
 	// scrapes to bound browser memory growth (0 = default 100).
 	ChromeRecycleAfter int `mapstructure:"chrome_recycle_after"`
+
+	// APIKeys, when non-empty, enables X-API-Key auth on /v1/*.
+	APIKeys []string `mapstructure:"api_keys"`
+
+	// RateLimitRPM caps requests per client per minute (0 = unlimited).
+	RateLimitRPM int `mapstructure:"rate_limit_rpm"`
 }
 
 type RedisConfig struct {
@@ -62,6 +68,8 @@ func Load() (*Config, error) {
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("app.loglevel", "info")
 	v.SetDefault("app.chrome_recycle_after", 100)
+	v.SetDefault("app.api_keys", "")
+	v.SetDefault("app.rate_limit_rpm", 0)
 	v.SetDefault("redis.url", "")
 	v.SetDefault("redis.host", "")
 	v.SetDefault("redis.port", "")
@@ -80,6 +88,16 @@ func Load() (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
+	}
+
+	// Parse comma-separated API keys from the environment.
+	if raw := v.GetString("app.api_keys"); raw != "" {
+		cfg.App.APIKeys = nil
+		for _, k := range strings.Split(raw, ",") {
+			if k = strings.TrimSpace(k); k != "" {
+				cfg.App.APIKeys = append(cfg.App.APIKeys, k)
+			}
+		}
 	}
 
 	// Construct Redis URL if not set but individual fields are present
