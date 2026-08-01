@@ -64,6 +64,45 @@ func (s *ChromedpScraper) Close() {
 	}
 }
 
+// screenshotParams is the resolved, validated set of screenshot settings.
+type screenshotParams struct {
+	width        int
+	height       int
+	format       string // "jpeg" or "png"
+	quality      int
+	fullPage     bool
+	waitSelector string
+}
+
+// resolveScreenshotParams applies defaults and clamps values from the
+// user-supplied ScreenshotOptions. A nil opts yields jpeg @1920x1080 q90.
+func resolveScreenshotParams(opts *domain.ScreenshotOptions) screenshotParams {
+	p := screenshotParams{width: 1920, height: 1080, format: "jpeg", quality: 90}
+	if opts == nil {
+		return p
+	}
+	if opts.Width > 0 {
+		p.width = opts.Width
+	}
+	if opts.Height > 0 {
+		p.height = opts.Height
+	}
+	switch opts.Format {
+	case "png":
+		p.format = "png"
+	case "jpeg", "jpg", "":
+		p.format = "jpeg"
+	default:
+		p.format = "jpeg"
+	}
+	if opts.Quality > 0 && opts.Quality <= 100 {
+		p.quality = opts.Quality
+	}
+	p.fullPage = opts.FullPage
+	p.waitSelector = opts.WaitSelector
+	return p
+}
+
 func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
 	// Create a new tab (Context) from the existing allocator
 	// This is much faster than starting a new browser process
@@ -103,16 +142,25 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	// viewport resize doesn't invalidate the HTML node references from
 	// the navigation action above.
 	if opts.Screenshot {
-		err = chromedp.Run(taskCtx,
-			chromedp.EmulateViewport(1920, 1080),
+		p := resolveScreenshotParams(opts.ScreenshotOpts)
+
+		actions := []chromedp.Action{}
+		if p.waitSelector != "" {
+			actions = append(actions, chromedp.WaitVisible(p.waitSelector, chromedp.ByQuery))
+		}
+		actions = append(actions,
+			chromedp.EmulateViewport(int64(p.width), int64(p.height)),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 				var err error
 				screenshotBuf, err = page.CaptureScreenshot().
-					WithQuality(90).
+					WithFormat(page.CaptureScreenshotFormat(p.format)).
+					WithQuality(int64(p.quality)).
+					WithCaptureBeyondViewport(p.fullPage).
 					Do(ctx)
 				return err
 			}),
 		)
+		err = chromedp.Run(taskCtx, actions...)
 		if err != nil {
 			// Log screenshot failure but don't fail the whole scrape
 			logger.Log.Warn("Screenshot failed, returning HTML-only result", "url", url, "error", err)

@@ -12,14 +12,25 @@ import (
 )
 
 type ScrapeRequest struct {
-	URL            string `json:"url" binding:"required,url"`
-	Render         bool   `json:"render"` // Deprecated: usage ignores Mode if true
-	Mode           string `json:"mode"`   // "smart", "static", "dynamic"
-	Screenshot     bool   `json:"screenshot"`
-	Images         bool   `json:"images"`
-	ImageFormat    string `json:"image_format"` // "url" or "blob"
-	MaxImages      int    `json:"max_images"`
-	MaxImageSizeKB int    `json:"max_image_size_kb"`
+	URL            string          `json:"url" binding:"required,url"`
+	Render         bool            `json:"render"` // Deprecated: usage ignores Mode if true
+	Mode           string          `json:"mode"`   // "smart", "static", "dynamic"
+	Screenshot     bool            `json:"screenshot"`
+	ScreenshotOpts *ScreenshotOpts `json:"screenshot_opts,omitempty"`
+	Images         bool            `json:"images"`
+	ImageFormat    string          `json:"image_format"` // "url" or "blob"
+	MaxImages      int             `json:"max_images"`
+	MaxImageSizeKB int             `json:"max_image_size_kb"`
+}
+
+// ScreenshotOpts is the wire format for screenshot configuration.
+type ScreenshotOpts struct {
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	FullPage     bool   `json:"full_page,omitempty"`
+	Format       string `json:"format,omitempty"`
+	Quality      int    `json:"quality,omitempty"`
+	WaitSelector string `json:"wait_selector,omitempty"`
 }
 
 type ScrapeHandler struct {
@@ -28,6 +39,22 @@ type ScrapeHandler struct {
 
 func NewScrapeHandler(s *scraper.Service) *ScrapeHandler {
 	return &ScrapeHandler{service: s}
+}
+
+// mapScreenshotOpts converts the wire-format screenshot options into the
+// domain type, returning nil when nothing was provided.
+func mapScreenshotOpts(in *ScreenshotOpts) *domain.ScreenshotOptions {
+	if in == nil {
+		return nil
+	}
+	return &domain.ScreenshotOptions{
+		Width:        in.Width,
+		Height:       in.Height,
+		FullPage:     in.FullPage,
+		Format:       in.Format,
+		Quality:      in.Quality,
+		WaitSelector: in.WaitSelector,
+	}
 }
 
 // wordCount returns the number of whitespace-delimited words in the given text.
@@ -135,6 +162,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 
 	result, err := h.service.Scrape(c.Request.Context(), req.URL, mode, domain.ScrapeOptions{
 		Screenshot:     req.Screenshot,
+		ScreenshotOpts: mapScreenshotOpts(req.ScreenshotOpts),
 		Images:         req.Images,
 		ImageFormat:    imageFormat,
 		MaxImages:      req.MaxImages,

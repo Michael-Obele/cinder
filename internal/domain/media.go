@@ -38,12 +38,12 @@ type ScreenshotData struct {
 
 // ScreenshotOptions configures screenshot capture behavior.
 type ScreenshotOptions struct {
-	Width        int
-	Height       int
-	FullPage     bool
-	Format       string
-	Quality      int
-	WaitSelector string
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	FullPage     bool   `json:"full_page,omitempty"`
+	Format       string `json:"format,omitempty"` // "jpeg" (default) or "png"
+	Quality      int    `json:"quality,omitempty"`
+	WaitSelector string `json:"wait_selector,omitempty"`
 }
 
 // ImageTransportFormat controls how images are returned.

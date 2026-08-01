@@ -14,24 +14,24 @@ import (
 )
 
 type CrawlRequest struct {
-	URL            string `json:"url" binding:"required,url"`
-	Render         bool   `json:"render"`
-	Screenshot     bool   `json:"screenshot"`
-	Images         bool   `json:"images"`
-	ImageFormat    string `json:"image_format"`
-	MaxDepth       int    `json:"maxDepth"`
-	Limit          int    `json:"limit"`
+	URL         string `json:"url" binding:"required,url"`
+	Render      bool   `json:"render"`
+	Screenshot  bool   `json:"screenshot"`
+	Images      bool   `json:"images"`
+	ImageFormat string `json:"image_format"`
+	MaxDepth    int    `json:"maxDepth"`
+	Limit       int    `json:"limit"`
 }
 
 type CrawlResponse struct {
-	ID         string `json:"id"`
-	URL        string `json:"url"`
-	Render     bool   `json:"render"`
-	Screenshot bool   `json:"screenshot"`
-	Images     bool   `json:"images"`
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	Render      bool   `json:"render"`
+	Screenshot  bool   `json:"screenshot"`
+	Images      bool   `json:"images"`
 	ImageFormat string `json:"image_format,omitempty"`
-	MaxDepth   int    `json:"maxDepth"`
-	Limit      int    `json:"limit"`
+	MaxDepth    int    `json:"maxDepth"`
+	Limit       int    `json:"limit"`
 }
 
 type CrawlHandler struct {
