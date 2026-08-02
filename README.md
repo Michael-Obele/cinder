@@ -1,148 +1,106 @@
 # Cinder 🔥
 
-<!-- [![Go Version](https://img.shields.io/github/go-mod/go-version/standard-user/cinder)](https://golang.org) -->
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/standard-user/cinder)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Status](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/Michael-Obele/cinder)
 
-**Cinder** is a high-performance, self-hosted web scraping API built with Go. It turns any website into LLM-ready markdown, designed as a drop-in alternative to Firecrawl.
+**Turn any website into LLM-ready markdown — self-hosted, one binary, runs on a $5/mo hobby box.** Cinder is a drop-in, open-source alternative to Firecrawl, written in Go.
 
-> **Why Cinder?** Heavily optimized for low-memory, serverless, and "hobby tier" environments by using intelligent browser process management and a unified "monolith" architecture. Deploys cleanly on Fly.io, Railway, Leapcell, or any Docker host.
+> One process. Low memory. No per-request browser spawning. Deploys to Fly.io, Railway, Leapcell, or any Docker host in minutes.
+
+---
+
+## 🚀 Quick start
+
+**Prerequisites:** Docker (or Go 1.25+ and Chromium). Redis is only needed for `/crawl`, `/batch`, and `/monitor`.
+
+**Option A — Docker (fastest):**
+
+```bash
+docker run -p 8080:8080 -e SERVER_MODE=release cinder
+```
+
+**Option B — From source:**
+
+```bash
+git clone https://github.com/Michael-Obele/cinder.git
+cd cinder
+go run ./cmd/api
+```
+
+**Your first scrape:**
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "mode": "smart"}'
+```
+
+Returns clean markdown in ~200ms (static) to ~1–3s (dynamic):
+
+```json
+{
+  "url": "https://example.com",
+  "markdown": "# Example Domain\n\nThis domain is established to be used for examples...",
+  "metadata": { "scraped_at": "2026-08-02T10:30:00Z", "engine": "chromedp" }
+}
+```
+
+> The root `GET /` returns a JSON overview of every `/v1` endpoint.
+
+---
+
+## 🚢 Deploy
+
+**Fly.io (recommended):** cheap autoscaling Machines with `auto_stop`/`auto_start` keep cost near zero when idle. The included `fly.toml` runs a 1GB shared-CPU machine — plenty for moderate dynamic scraping thanks to browser recycling.
+
+```bash
+fly launch          # uses the included fly.toml
+fly secrets set REDIS_URL=rediss://... BRAVE_SEARCH_API_KEY=...
+fly deploy
+```
+
+- **Railway** — native Dockerfile; set `SERVER_MODE=release` (512MB hobby tier works).
+- **Leapcell** — 4GB RAM, pay-per-compute-minute; ~$5–15/mo for moderate traffic.
+- **Any Docker host** — single static binary; Redis is the only external dependency (and only for queue/batch/monitor).
+- **Vercel / AWS Lambda** — possible but not recommended (Chromium ~400MB; Lambda cold starts 10–15s).
 
 ---
 
 ## ✨ Features
 
-- **⚡ Fast & Efficient**: Reuses a single Chrome process with lightweight tabs, avoiding the heavy startup cost of spawning browsers per request. Parallel image blob fetching and parallel crawl workers.
-- **🏭 Monolith Mode**: Runs the API and Async Worker in a single binary/container. Perfect for services like Railway or Leapcell where you pay per active container.
-- **🔄 Async Queues**: Redis-backed job queue (Asynq) for handling heavy scrape jobs without blocking HTTP clients.
-- **🧠 LLM Ready**: Converts complex HTML/SPAs into clean, structured Markdown using `html-to-markdown/v2` + readability main-content extraction.
-- **🕵️ Evasion**: Automatic User-Agent rotation and un-detected headless flags.
-- **🗺️ URL Discovery**: `/v1/map` finds site URLs via `robots.txt`/`sitemap.xml` with link-discovery fallback.
-- **🖼️ Image Engine v2**: srcset/lazy-load/`<picture>` extraction, quality-ranked selection (og > hero > content > avatar), dimension sniffing, and optional resize/re-encode.
-- **📡 Signed Webhooks**: Crawl completion and monitor change notifications with HMAC-SHA256 signatures.
-- **📊 Change Tracking**: `/v1/monitor` schedules content-hash checks and alerts on change.
-- **📦 Batch Scrape**: `/v1/batch/scrape` enqueues up to 20 URLs with aggregated status.
-- **🎬 Page Actions**: `wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom` before capture.
-- **🧹 Cleaner Output**: Deterministic schema extraction, extractive summaries, PII redaction, ad blocking, and base64-image removal — all LLM-free.
-- **🔐 Auth & Rate Limiting**: Optional `X-API-Key` auth and per-client rate limiting.
+| Feature                 | What it gives you                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ⚡ **Fast & efficient** | Reuses one Chrome process with lightweight tabs — no ~500ms spawn per request. Parallel image fetching + parallel crawl. |
+| 🏭 **Monolith mode**    | API + async worker in a single binary. Pay per container, not per service.                                               |
+| 🔄 **Async queues**     | Redis-backed (Asynq) for heavy crawl jobs without blocking clients.                                                      |
+| 🧠 **LLM-ready**        | Clean markdown via `html-to-markdown/v2` + readability main-content extraction.                                          |
+| 🕵️ **Evasion**          | Auto user-agent rotation + undetected headless flags.                                                                    |
+| 🗺️ **URL discovery**    | `/v1/map` from `robots.txt`/`sitemap.xml` with link fallback.                                                            |
+| 🖼️ **Image engine v2**  | srcset/lazy-load/`<picture>` extraction, quality-ranked, dimension sniffing, optional resize.                            |
+| 📡 **Signed webhooks**  | HMAC-SHA256 crawl & monitor notifications.                                                                               |
+| 📊 **Change tracking**  | `/v1/monitor` hashes markdown and alerts on change.                                                                      |
+| 📦 **Batch scrape**     | Enqueue up to 20 URLs, aggregated status.                                                                                |
+| 🎬 **Page actions**     | `wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`.                                                  |
+| 🧹 **Cleaner output**   | Schema extraction, summaries, PII redaction, ad blocking — all LLM-free.                                                 |
+| 🔐 **Auth & limits**    | Optional `X-API-Key` auth + per-client rate limiting.                                                                    |
 
 ---
 
-## 🚀 Quickstart
+## 📋 Scraping modes
 
-### Prerequisites
+| Mode              | Engine   | Speed  | JS           | Best for         |
+| ----------------- | -------- | ------ | ------------ | ---------------- |
+| `static`          | Colly    | ⚡⚡⚡ | ❌           | Traditional HTML |
+| `dynamic`         | Chromedp | ⚡     | ✅           | React/Vue/SPAs   |
+| `smart` (default) | Auto     | ⚡⚡   | ✅ sometimes | Most sites       |
 
-- **Go 1.25+** (for local development)
-- **Redis** (Required for `/crawl`, `/batch`, and `/monitor` endpoints, optional for simple `/scrape`)
-- **Chromium** (Installed automatically in Docker or Linux systems)
+**Smart mode** tries static first (~200ms), then falls back to dynamic if content is thin or fails.
 
-### System Requirements
+---
 
-- **Memory**:
-  - Minimum: 512MB (basic scraping only, no JS rendering)
-  - Recommended: 1-2GB (comfortable for dynamic scraping + async queue)
-  - Hobby Tier (4GB): Perfect for production use
-- **CPU**: 1+ cores (single core works, multiple cores improve concurrency)
-- **Disk**: 50MB (binary + dependencies)
-
-> **Fly.io default**: the included `fly.toml` runs on a 1GB shared-CPU machine with 1GB swap — plenty for moderate dynamic workloads thanks to browser recycling (`CHROME_RECYCLE_AFTER`). Cinder runs anywhere Docker does: Fly.io, Railway, Leapcell, VPS, or bare metal.
-
-### Local Installation & Running
-
-```bash
-# Clone
-git clone https://github.com/Michael-Obele/cinder.git
-cd cinder
-
-# Install dependencies
-go mod download
-
-# Create .env (optional, uses defaults)
-cat > .env << 'EOF'
-SERVER_PORT=8080
-SERVER_MODE=debug
-LOG_LEVEL=info
-# REDIS_URL=redis://localhost:6379  # Optional, for /crawl, /batch, /monitor
-# API_KEYS=sk_a,sk_b               # Optional; when set, /v1/* requires X-API-Key
-EOF
-
-# Run (Monolith Mode)
-go run ./cmd/api
-```
-
-Visit `http://localhost:8080` — the root returns a JSON service overview listing every endpoint under `/v1`.
-
-### Quick Test
-
-```bash
-# Test synchronous scrape
-curl -X POST http://localhost:8080/v1/scrape \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com", "mode": "static"}'
-
-# Should return markdown content in ~500ms
-```
-
-### Docker
-
-```bash
-# Build
-docker build -t cinder .
-
-# Run with environment variables
-docker run -p 8080:8080 \
-  -e SERVER_PORT=8080 \
-  -e SERVER_MODE=release \
-  cinder
-
-# With Redis for async crawling
-docker run -p 8080:8080 \
-  -e REDIS_URL=redis://host.docker.internal:6379 \
-  cinder
-```
-
-### Deployment Guides
-
-#### Fly.io (Recommended)
-
-- **Why**: cheap autoscaling Machines, global regions, and `auto_stop`/`auto_start` (already in the included `fly.toml`) keep cost near zero when idle
-- **Setup**: `fly launch`, then `fly deploy` — the included `fly.toml` runs a 1GB shared-CPU machine with 1GB swap
-- **Config**: set `SERVER_MODE=release`; add `REDIS_URL` (e.g. Upstash) and `BRAVE_SEARCH_API_KEY` as secrets
-- **Memory**: 1GB is fine for moderate dynamic scraping thanks to browser recycling
-
-```bash
-fly secrets set REDIS_URL=rediss://... BRAVE_SEARCH_API_KEY=...
-fly deploy
-```
-
-#### Railway
-
-- Dockerfile support: ✅ Native
-- Environment: Set `SERVER_MODE=release`
-- Memory: Hobby Tier (512MB) recommended
-
-#### Leapcell (Great for Hobby Projects)
-
-- **Why**: 4GB RAM + pay-per-compute-minute billing
-- **Cost**: ~$5-15/month for moderate traffic
-- **Setup**: Push Docker image, set env vars
-- **Note**: Monolith Mode perfectly fits the resource constraints
-
-#### Any Docker Host (VPS, ECS, etc.)
-
-Cinder is a single static binary in a Docker image — it runs anywhere containers run. No platform-specific APIs are used; Redis is the only external dependency, and only for queue/batch/monitor features.
-
-#### Vercel
-
-- Use as a serverless function (requires API refactor for edge runtime)
-- Not recommended due to Chromium size (~400MB)
-
-#### AWS Lambda
-
-- Requires AWS Lambda Container Images
-- Cold starts ~10-15s (browser startup)
-- Reserve concurrency for faster starts
+## 🔌 API endpoints
 
 All endpoints are prefixed with `/v1/`.
 
@@ -370,50 +328,30 @@ Exceeding the rate limit returns `429` with a `retry_after` hint. Redis-backed l
 
 ---
 
-## 📋 Scraping Modes Explained
+## ⚙️ Configuration
 
-| Mode        | Engine      | Speed       | JS Support   | Best For               |
-| ----------- | ----------- | ----------- | ------------ | ---------------------- |
-| **static**  | Colly       | ⚡⚡⚡ Fast | ❌ No        | Traditional HTML sites |
-| **dynamic** | Chromedp    | ⚡ Slow     | ✅ Yes       | React, Vue, SPAs       |
-| **smart**   | Auto-detect | ⚡⚡ Medium | ✅ Sometimes | Most sites (default)   |
+| Variable               | Default | Purpose                                                     |
+| ---------------------- | ------- | ----------------------------------------------------------- |
+| `SERVER_PORT`          | `8080`  | HTTP port                                                   |
+| `SERVER_MODE`          | `debug` | `debug` / `release` / `test`                                |
+| `LOG_LEVEL`            | `info`  | `debug` / `info` / `warn` / `error`                         |
+| `REDIS_URL`            | (none)  | Redis URL — **required** for `/crawl`, `/batch`, `/monitor` |
+| `BRAVE_SEARCH_API_KEY` | (none)  | Enables `/v1/search`                                        |
+| `DISABLE_WORKER`       | `false` | Set `true` to run API without the embedded worker           |
+| `CHROME_RECYCLE_AFTER` | `100`   | Restart Chrome allocator after N scrapes (bounds memory)    |
+| `CRAWL_CONCURRENCY`    | `4`     | Parallel crawl workers (1–10)                               |
+| `CRAWL_DOMAIN_DELAY`   | `1`     | Min seconds between requests to the same host               |
+| `WEBHOOK_TIMEOUT`      | `10`    | Webhook delivery timeout (s)                                |
+| `API_KEYS`             | (none)  | Comma-separated keys; enables `X-API-Key` auth              |
+| `RATE_LIMIT_RPM`       | `0`     | Per-client requests/min (0 = unlimited)                     |
 
-**Smart Mode Algorithm:**
-
-- Attempts static scrape first (~200ms)
-- Falls back to dynamic if content is minimal or fails
-
----
-
-## 🔧 Environment Variables
-
-| Variable               | Default | Required      | Description                                                          |
-| ---------------------- | ------- | ------------- | -------------------------------------------------------------------- |
-| `SERVER_PORT`          | `8080`  | No            | HTTP server port                                                     |
-| `SERVER_MODE`          | `debug` | No            | Server mode: `debug`, `release`, `test`                              |
-| `LOG_LEVEL`            | `info`  | No            | Log level: `debug`, `info`, `warn`, `error`                          |
-| `REDIS_URL`            | (none)  | Conditional\* | Redis connection URL (e.g., `redis://localhost:6379`)                |
-| `REDIS_HOST`           | (none)  | Conditional\* | Redis host (alternative to `REDIS_URL`)                              |
-| `REDIS_PORT`           | `6379`  | Conditional\* | Redis port                                                           |
-| `REDIS_PASSWORD`       | (none)  | Conditional\* | Redis password                                                       |
-| `BRAVE_SEARCH_API_KEY` | (none)  | No            | API key for Brave Search endpoint                                    |
-| `DISABLE_WORKER`       | `false` | No            | Set to `true` to disable embedded worker (microservices mode)        |
-| `CHROME_RECYCLE_AFTER` | `100`   | No            | Restart the Chrome allocator after N scrapes to bound memory growth  |
-| `CRAWL_CONCURRENCY`    | `4`     | No            | Parallel crawl workers (1-10)                                        |
-| `CRAWL_DOMAIN_DELAY`   | `1`     | No            | Minimum seconds between requests to the same host during a crawl     |
-| `WEBHOOK_TIMEOUT`      | `10`    | No            | Webhook delivery timeout in seconds                                  |
-| `API_KEYS`             | (none)  | No            | Comma-separated keys; enables `X-API-Key` auth on `/v1/*`            |
-| `RATE_LIMIT_RPM`       | `0`     | No            | Per-client requests/minute (0 = unlimited)                           |
-
-**Note:** \*Redis is required for `/v1/crawl`, `/v1/batch/*`, and `/v1/monitor*` endpoints. Without it, they return **503 Service Unavailable**.
+> Redis alternatives `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` also supported. Without Redis, queue endpoints return `503`.
 
 ---
 
 ## 🏗️ Architecture
 
-### System Design
-
-Cinder employs a **Monolithic Architecture with Embedded Worker** pattern, optimized for serverless and hobby-tier deployments where minimizing resource usage and cold-start times is critical.
+Cinder is a **monolith with an embedded worker** — one binary runs the Gin API and the Asynq worker, optimized for serverless and hobby-tier deployments.
 
 #### Core Components
 
@@ -468,67 +406,11 @@ Validate URL → Create Task → Enqueue Job → Return Job ID
                Result Storage → Client Polls Status
 ```
 
-#### Browser Optimization Strategy
+- **Singleton allocator** — one Chromium, lightweight tabs (`chromedp.NewContext`). ~200–300MB total.
+- **Smart mode** — static first, dynamic fallback.
+- **Reliability** — graceful degradation, Redis circuit breaker, browser recycling, option-aware result caching.
 
-**Problem Solved:** Traditional scraping spawns a new Chrome process per request (~500ms startup + 300MB RAM), making it unsuitable for concurrent workloads.
-
-**Cinder's Solution:**
-
-- **Singleton Allocator**: One Chromium process per container instance
-- **Tab Pooling**: Each scrape request creates a lightweight tab (`chromedp.NewContext`)
-- **Memory Efficiency**: ~200-300MB total for browser + API server
-- **Concurrency**: 5 queue workers (configurable in `internal/worker/server.go`) + a parallel crawl pool (`CRAWL_CONCURRENCY`, default 4)
-
-**Performance Impact:**
-
-- **Latency**: ~200ms static, ~1-3s dynamic (vs 2-5s with process spawning)
-- **Throughput**: 3-5 requests/second on 2GB instances
-- **Resource Usage**: 70% less memory than traditional approaches
-
-#### Scalability Considerations
-
-**Horizontal Scaling:**
-
-- **Stateless Design**: API instances can be scaled independently
-- **Shared Redis**: Queue coordination across multiple workers
-- **Load Balancing**: Standard HTTP load balancers work out-of-the-box
-
-**Vertical Scaling:**
-
-- **Memory**: 4GB recommended for production (handles browser + concurrent requests)
-- **CPU**: 1-2 cores sufficient (I/O bound, not CPU bound)
-- **Storage**: Minimal disk usage (logs + optional cache)
-
-**Reliability Features:**
-
-- **Graceful Degradation**: Falls back to static scraping if dynamic fails
-- **Circuit Breaker**: Redis unavailability doesn't crash the API
-- **Browser Recycling**: Chrome allocator restarts after `CHROME_RECYCLE_AFTER` scrapes (default 100) to bound memory growth
-- **Result Caching**: Redis-backed, option-aware response caching reduces duplicate work
-
-#### Design Decisions
-
-**Why Monolith Mode?**
-
-- **Serverless Optimization**: Single process minimizes cold-start overhead
-- **Resource Efficiency**: No inter-service communication overhead
-- **Hobby-Tier Friendly**: Fits within free tier limits (Leapcell 4GB RAM)
-- **Simplicity**: Easier deployment and debugging
-
-**Why Asynq over Custom Queue?**
-
-- **Battle-Tested**: Production-ready Redis-backed queue
-- **Observability**: Built-in metrics and monitoring
-- **Reliability**: Automatic retries, dead letter queues, task scheduling
-- **Ecosystem**: Active maintenance and community support
-
-**Why Smart Mode Default?**
-
-- **User-Friendly**: Works for most sites without configuration
-- **Cost-Effective**: Tries fast static scraping first
-- **Fallback Safety**: Gracefully degrades to dynamic rendering
-
-See [plan/architecture.md](plan/architecture.md) for deeper technical details and design rationale.
+See [`plan/architecture.md`](plan/architecture.md) for full design rationale.
 
 ---
 
@@ -597,53 +479,31 @@ Typical latencies on a 2GB instance with hot browser:
 
 ---
 
-## �🗺️ Roadmap & Status
+## 🗺️ Roadmap
 
-| Phase       | Goal                                                                  | Status      |
-| :---------- | :-------------------------------------------------------------------- | :---------- |
-| **Phase 1** | Static Scraping (Colly)                                               | ✅ Done     |
-| **Phase 2** | Dynamic Scraping (Chromedp)                                           | ✅ Done     |
-| **Phase 3** | Async Queue (Asynq + Redis)                                           | ✅ Done     |
-| **Phase 4** | Polish & Auth (API keys, rate limiting)                               | ✅ Done     |
-| **Phase 5** | High Performance & Reliability (browser recycling, parallel crawl)    | ✅ Done     |
-| **Phase 6** | Cinder v2 (images v2, map, batch, actions, monitors, extraction)      | ✅ Done     |
+| Phase | Goal                                                             | Status  |
+| ----- | ---------------------------------------------------------------- | ------- |
+| 1–5   | Static, dynamic, async queue, auth, performance                  | ✅ Done |
+| 6     | Cinder v2 (images v2, map, batch, actions, monitors, extraction) | ✅ Done |
 
-**Current Focus**:
-
-- **Stealth tier**: TLS fingerprint spoofing (`refraction-networking/utls`) + CDP stealth-script injection for Cloudflare/DataDome-protected sites.
-- **PDF & documents**: parse PDFs and other non-HTML assets in `/v1/scrape` (Firecrawl parity).
-- **Benchmarks**: `pprof` profiles + benchmark suite for scraper and image-processing hot paths.
-- **Heuristic "smart wait"**: network-idle detection and configurable readiness conditions beyond the current selector/scroll actions.
+**Next:** stealth tier (`utls` + CDP stealth), PDF/non-HTML parsing, `pprof` benchmarks, heuristic smart-wait.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! This project is in **active development** and priorities are:
+Active development — priorities: stealth/anti-bot, PDF & documents, benchmarks, smart-wait.
 
-1. **Stealth & anti-bot** — TLS fingerprint spoofing (`utls`) and CDP stealth-script injection for Cloudflare/DataDome-protected sites.
-2. **PDF & documents** — parse PDFs (and other non-HTML assets) in `/v1/scrape`.
-3. **Benchmarks** — `pprof` + benchmark suite for the scraper and image-processing hot paths.
-4. **Heuristic "smart wait"** — network-idle detection and configurable page-readiness conditions.
-
-**How to Contribute:**
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/amazing-feature`)
-3. Add tests for your changes
-4. Commit your Changes (`git commit -m 'Add amazing feature'`)
-5. Push to the Branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
-**Code Standards:**
-
-- Use `go fmt` for formatting
-- Add structured logging via `pkg/logger`
-- Include error handling (avoid silent failures)
-- Test your code locally: `make check` (gofmt, vet, staticcheck, tests with `-race`)
+1. Fork → `git checkout -b feature/...` → add tests → `git commit` → push → open PR.
+2. Run `make check` (gofmt, vet, staticcheck, `-race` tests) before submitting.
+3. Use `pkg/logger` for logging; handle all errors explicitly.
 
 ---
 
 ## ⚖️ License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+MIT — see [`LICENSE`](LICENSE).
+
+---
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Michael-Obele/cinder&type=Date)](https://star-history.com/#Michael-Obele/cinder&Date)
