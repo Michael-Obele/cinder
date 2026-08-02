@@ -174,10 +174,13 @@ Accepts a JSON body with scraping parameters and crawl-specific options.
 
 - **Parallel**: Pages are scraped concurrently (env `CRAWL_CONCURRENCY`, default 4, max 10).
 - **Polite**: A minimum interval between requests to the same host (env `CRAWL_DOMAIN_DELAY`, default 1s).
-- **Retries**: Transient failures are retried twice with backoff; 4xx errors are never retried.
+- **Retries**: Transient failures are retried `CRAWL_MAX_RETRIES` times (default 2) with backoff; 4xx errors are never retried.
+- **Watchdogs**: An internal deadline (`CRAWL_TIMEOUT`, default 30m) returns a `"timeout"` result instead of hanging; each scrape attempt is bounded by `CRAWL_SCRAPE_TIMEOUT` (default 30s).
+- **Bounded queue**: Enqueue is non-blocking; when the queue is full, excess links are dropped so a crawl can never deadlock, and the queue never carries more than `limit` unprocessed URLs.
 - **Domain-locked**: The crawler only follows links on the same hostname as the seed URL.
 - **Deduplication**: Each URL is visited only once per crawl job.
 - **Resource filtering**: Non-HTML resources (`.pdf`, `.jpg`, `.css`, `.js`, etc.) are automatically skipped.
+- **Glob semantics**: Include/exclude patterns use gobwas/glob — `*` stays within a path segment, `**` crosses segments (`/blog/**`). The seed URL always bypasses the filters.
 
 ### Example Request
 

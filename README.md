@@ -341,6 +341,9 @@ Exceeding the rate limit returns `429` with a `retry_after` hint. Redis-backed l
 | `CHROME_RECYCLE_AFTER` | `100`   | Restart Chrome allocator after N scrapes (bounds memory)    |
 | `CRAWL_CONCURRENCY`    | `4`     | Parallel crawl workers (1–10)                               |
 | `CRAWL_DOMAIN_DELAY`   | `1`     | Min seconds between requests to the same host               |
+| `CRAWL_TIMEOUT`        | `30`    | Overall crawl deadline (minutes; crawl returns `"timeout"`) |
+| `CRAWL_SCRAPE_TIMEOUT` | `30`    | Per-attempt scrape deadline inside a crawl (s)              |
+| `CRAWL_MAX_RETRIES`    | `2`     | Retries per URL (0–5; 4xx never retried)                    |
 | `WEBHOOK_TIMEOUT`      | `10`    | Webhook delivery timeout (s)                                |
 | `API_KEYS`             | (none)  | Comma-separated keys; enables `X-API-Key` auth              |
 | `RATE_LIMIT_RPM`       | `0`     | Per-client requests/min (0 = unlimited)                     |

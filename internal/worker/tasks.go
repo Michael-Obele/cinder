@@ -88,9 +88,14 @@ func NewCrawlTaskWithOptions(crawlURL string, render bool, screenshot bool, imag
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal crawl payload: %w", err)
 	}
-	// Crawl tasks can be longer; retain result for 7 days
+	// Crawl tasks can be longer; retain result for 7 days.
+	// The task-level timeout is a safety net BEYOND the internal deadline in
+	// ExecuteCrawl (CRAWL_TIMEOUT): if the handler ever hangs (a bug), Asynq
+	// kills it after this and retries/archives per MaxRetry instead of
+	// occupying the worker forever.
 	return asynq.NewTask(TypeCrawl, data,
 		asynq.Retention(7*24*time.Hour),
 		asynq.MaxRetry(2),
+		asynq.Timeout(crawlTimeout()+5*time.Minute),
 	), nil
 }

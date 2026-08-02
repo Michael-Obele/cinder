@@ -231,8 +231,8 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 
 	// Extract title and word count for the summary
 	title := ""
-	if result.Markdown != "" {
-		title = extractTitle(result.Markdown)
+	if result.Markdown != "" || result.HTML != "" {
+		title = extractTitle(*result)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

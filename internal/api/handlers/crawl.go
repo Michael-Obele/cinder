@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/worker"
 )
 
@@ -188,7 +190,7 @@ func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 			for _, p := range crawlResult.Pages {
 				pages = append(pages, pageEntry{
 					URL:     p.URL,
-					Title:   extractTitle(p.Markdown),
+					Title:   extractTitle(p),
 					Preview: extractPreview(p.Markdown, 300),
 				})
 			}
@@ -224,7 +226,10 @@ func taskStateLabel(s asynq.TaskState) string {
 	case asynq.TaskStateRetry:
 		return "retry"
 	case asynq.TaskStateArchived:
-		return "archived"
+		// Retries exhausted — a permanent failure. Map to "failed" so
+		// clients (and MCP tools) that don't know the internal "archived"
+		// state can treat the job as finished.
+		return "failed"
 	case asynq.TaskStateCompleted:
 		return "completed"
 	default:
@@ -232,13 +237,37 @@ func taskStateLabel(s asynq.TaskState) string {
 	}
 }
 
-// extractTitle returns the first H1 heading from markdown content.
-func extractTitle(markdown string) string {
-	for _, line := range strings.Split(markdown, "\n") {
+// extractTitle returns the best available page title. It falls back through
+// the HTML `<h1>`, the `<title>` tag, `meta[property="og:title"]`, the first
+// heading of any level, the first markdown H1, and finally the URL hostname,
+// so a title is almost always returned.
+func extractTitle(p domain.ScrapeResult) string {
+	if p.HTML != "" {
+		if doc, err := goquery.NewDocumentFromReader(strings.NewReader(p.HTML)); err == nil {
+			if t := strings.TrimSpace(doc.Find("h1").First().Text()); t != "" {
+				return t
+			}
+			if t := strings.TrimSpace(doc.Find("title").First().Text()); t != "" {
+				return t
+			}
+			if t := strings.TrimSpace(doc.Find(`meta[property="og:title"]`).First().AttrOr("content", "")); t != "" {
+				return t
+			}
+			if t := strings.TrimSpace(doc.Find("h1,h2,h3,h4,h5,h6").First().Text()); t != "" {
+				return t
+			}
+		}
+	}
+	// Markdown fallback: the first H1 line.
+	for _, line := range strings.Split(p.Markdown, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "# ") {
 			return strings.TrimPrefix(trimmed, "# ")
 		}
+	}
+	// Last resort: the hostname of the scraped URL.
+	if u, err := url.Parse(p.URL); err == nil && u.Hostname() != "" {
+		return u.Hostname()
 	}
 	return ""
 }

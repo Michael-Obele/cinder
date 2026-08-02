@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/scraper"
@@ -739,5 +741,113 @@ func TestExecuteCrawl_ResourceLinksNotFollowed(t *testing.T) {
 			url == "https://example.com/data.json" {
 			t.Errorf("Should not have attempted to scrape resource URL: %q", url)
 		}
+	}
+}
+
+// TestExecuteCrawl_WidePageNoDeadlock is a regression test for the
+// producer–consumer deadlock: a single page yielding more links than the
+// queue buffer (8) used to block every worker in `queue <- e` until the
+// crawl hung forever. Enqueue must be non-blocking — excess links are
+// dropped and the crawl completes with at most `limit` pages.
+func TestExecuteCrawl_WidePageNoDeadlock(t *testing.T) {
+	links := make([]string, 0, 300)
+	for i := 0; i < 300; i++ {
+		links = append(links, fmt.Sprintf(`<a href="/page-%d">P%d</a>`, i, i))
+	}
+	seedHTML := "<html><body>" + strings.Join(links, "") + "</body></html>"
+
+	mock := &mockCrawlScraper{
+		pages: map[string]*domain.ScrapeResult{
+			"https://example.com": {
+				URL: "https://example.com", Markdown: "# Home",
+				HTML: seedHTML, Metadata: map[string]string{},
+			},
+		},
+	}
+	// Every discovered page resolves in the mock (returns a page-not-found
+	// error otherwise — which is fine; the crawl must still terminate).
+	for i := 0; i < 300; i++ {
+		u := fmt.Sprintf("https://example.com/page-%d", i)
+		mock.pages[u] = &domain.ScrapeResult{URL: u, Markdown: "P", HTML: "<html></html>", Metadata: map[string]string{}}
+	}
+
+	svc := scraper.NewService(mock, nil, nil)
+	handler := NewCrawlTaskHandler(svc, newTestLogger())
+
+	// If the deadlock regresses, ExecuteCrawl would still return once the
+	// deadline fires — but with "timeout" instead of "completed".
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := handler.ExecuteCrawl(ctx, CrawlPayload{
+		URL: "https://example.com", MaxDepth: 2, Limit: 100,
+	}, "test-wide")
+
+	if err != nil {
+		t.Fatalf("ExecuteCrawl failed: %v", err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("Expected 'completed' (no deadlock), got %q", result.Status)
+	}
+	if result.TotalPages == 0 {
+		t.Fatal("Expected at least the seed page to be scraped")
+	}
+	if result.TotalPages > result.Limit {
+		t.Errorf("Queue-depth cap violated: %d pages scraped with limit %d", result.TotalPages, result.Limit)
+	}
+}
+
+// TestExecuteCrawl_DeadlineExceeded verifies the internal watchdog maps a
+// deadline expiry to the "timeout" status instead of hanging the worker.
+func TestExecuteCrawl_DeadlineExceeded(t *testing.T) {
+	mock := &mockCrawlScraper{
+		pages: map[string]*domain.ScrapeResult{
+			"https://example.com": {
+				URL: "https://example.com", Markdown: "# Home",
+				HTML: `<html><body><a href="/p1">P1</a></body></html>`, Metadata: map[string]string{},
+			},
+		},
+	}
+
+	svc := scraper.NewService(mock, nil, nil)
+	handler := NewCrawlTaskHandler(svc, newTestLogger())
+
+	// Pre-expired deadline → crawlCtx.Err() is DeadlineExceeded.
+	ctx, cancel := context.WithTimeout(context.Background(), -time.Second)
+	defer cancel()
+
+	result, _ := handler.ExecuteCrawl(ctx, CrawlPayload{
+		URL: "https://example.com", MaxDepth: 5, Limit: 100,
+	}, "test-timeout")
+
+	if result.Status != "timeout" {
+		t.Errorf("Expected 'timeout' status, got %q", result.Status)
+	}
+}
+
+// TestMatchesAny_DoubleStar verifies separator-aware glob matching with
+// `**` support (path.Match cannot cross path segments, gobwas/glob can
+// when compiled with '/' as the separator).
+func TestMatchesAny_DoubleStar(t *testing.T) {
+	tests := []struct {
+		pattern string
+		path    string
+		want    bool
+	}{
+		{"/blog/*", "/blog/post", true},
+		{"/blog/*", "/blog/a/b/post", false}, // * does not cross /
+		{"/blog/**", "/blog/a/b/post", true}, // ** crosses /
+		{"/blog/**", "/blog/", true},
+		{"/blog/**", "/blog", false}, // pattern carries a trailing slash
+		{"/catalogue/*", "/catalogue/book", true},
+		{"/docs/*.md", "/docs/api.md", true},
+		{"/docs/?", "/docs/a", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.pattern+" vs "+tt.path, func(t *testing.T) {
+			if got := matchesAny([]string{tt.pattern}, tt.path); got != tt.want {
+				t.Errorf("matchesAny(%q, %q) = %v, want %v", tt.pattern, tt.path, got, tt.want)
+			}
+		})
 	}
 }

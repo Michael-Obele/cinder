@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/gobwas/glob"
 	"github.com/hibiken/asynq"
 	"github.com/standard-user/cinder/internal/domain"
 	"github.com/standard-user/cinder/internal/scraper"
@@ -89,6 +90,16 @@ func (h *CrawlTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 // scraped concurrently (up to crawlConcurrency workers) while respecting a
 // per-domain politeness delay, retrying transient failures with backoff,
 // and never retrying 4xx errors.
+//
+// Semantics worth noting:
+//   - The seed URL is ALWAYS scraped, even when include/exclude patterns are
+//     set — patterns apply only to links discovered while following pages.
+//   - The crawl is bounded by an internal deadline (CRAWL_TIMEOUT); on
+//     expiry the result status is "timeout" so a misbehaving site can never
+//     hang the worker forever.
+//   - Enqueuing is non-blocking: when the work queue is full, excess links
+//     are dropped. The queue therefore never carries more than `limit`
+//     unprocessed entries, and no producer can block on a full buffer.
 func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayload, taskID string) (*CrawlResult, error) {
 	// Apply sensible defaults and caps
 	maxDepth := payload.MaxDepth
@@ -116,6 +127,13 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 		mode = "smart"
 	}
 
+	// Internal watchdog: a misbehaving site must never occupy an Asynq
+	// worker indefinitely. The task-level timeout (asynq.Timeout) is a
+	// larger safety net for handler bugs; this deadline guarantees the
+	// handler itself always returns.
+	crawlCtx, cancel := context.WithTimeout(ctx, crawlTimeout())
+	defer cancel()
+
 	seedURL, err := url.Parse(payload.URL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid seed URL %q: %w", payload.URL, err)
@@ -123,6 +141,7 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 	allowedHost := seedURL.Hostname()
 
 	h.logger.Info("Starting crawl",
+		"timeout", crawlTimeout().String(),
 		"url", payload.URL,
 		"maxDepth", maxDepth,
 		"limit", limit,
@@ -147,22 +166,38 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 		depth int
 	}
 
+	// Buffered work queue. Enqueue is NON-BLOCKING: when the buffer is full
+	// the entry is simply dropped (the limit check caps results anyway), so
+	// no producer can ever block and deadlock the pool. Dropped entries just
+	// mean BFS visits fewer pages than the frontier offered.
 	queue := make(chan queueEntry, crawlConcurrency()*2)
+
+	// stop signals workers to exit early (cancellation or limit reached).
+	// queue is closed ONLY when pending hits 0 — at that point every worker
+	// has finished sending, so close can never race a send.
+	var stopOnce sync.Once
+	stop := make(chan struct{})
+	closeStop := func() { stopOnce.Do(func() { close(stop) }) }
 
 	var mu sync.Mutex
 	visited := map[string]bool{normalizeURL(payload.URL): true}
 	var results []domain.ScrapeResult
 	var failed []FailedURL
 	lastRequest := make(map[string]time.Time) // per-host politeness
-	pending := 1                              // the seed entry
+	pending := 1                              // the seed entry, not yet picked
+	queued := 1                               // the seed entry, still in the queue
 
 	var closeOnce sync.Once
 	closeQueue := func() { closeOnce.Do(func() { close(queue) }) }
 
-	// Workers exit early when the crawl is cancelled.
+	// Workers exit early when the crawl is cancelled. The watchdog goroutine
+	// is joined (watchDone) before ExecuteCrawl returns, so it can never
+	// outlive the call and trip the race detector.
+	watchDone := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		closeQueue()
+		defer close(watchDone)
+		<-crawlCtx.Done()
+		closeStop()
 	}()
 
 	queue <- queueEntry{url: normalizeURL(payload.URL), depth: 0}
@@ -170,16 +205,29 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 	var wg sync.WaitGroup
 	worker := func() {
 		defer wg.Done()
-		for entry := range queue {
-			if ctx.Err() != nil {
+		for {
+			var entry queueEntry
+			var ok bool
+			select {
+			case entry, ok = <-queue:
+				if !ok {
+					// queue closed: every entry has been picked (close only
+					// happens when pending reaches 0) — crawl is done.
+					return
+				}
+			case <-stop:
+				return
+			}
+			if crawlCtx.Err() != nil {
 				return
 			}
 
 			mu.Lock()
+			queued--
 			overLimit := len(results) >= limit
 			mu.Unlock()
 			if overLimit {
-				closeQueue()
+				closeStop()
 				return
 			}
 
@@ -199,20 +247,26 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 			if delay > 0 {
 				select {
 				case <-time.After(delay):
-				case <-ctx.Done():
+				case <-crawlCtx.Done():
 					return
 				}
 			}
 
+			// Snapshot under the lock: len(results) is written by other
+			// workers and must not be read unlocked.
+			mu.Lock()
+			scraped := len(results)
+			mu.Unlock()
+
 			h.logger.Info("Crawling page",
 				"url", entry.url,
 				"depth", entry.depth,
-				"scraped", len(results),
+				"scraped", scraped,
 				"queued", len(queue),
 				"task_id", taskID,
 			)
 
-			result, scrapeErr := scrapeWithRetry(ctx, h.scraper, entry.url, mode, scrapeOpts)
+			result, scrapeErr := scrapeWithRetry(crawlCtx, h.scraper, entry.url, mode, scrapeOpts)
 			if scrapeErr != nil {
 				mu.Lock()
 				failed = append(failed, FailedURL{URL: entry.url, Error: scrapeErr.Error()})
@@ -228,7 +282,7 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 			mu.Lock()
 			if len(results) >= limit {
 				mu.Unlock()
-				closeQueue()
+				closeStop()
 				return
 			}
 			results = append(results, *result)
@@ -246,11 +300,15 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 					if visited[normalized] {
 						continue
 					}
-					if len(results)+len(newEntries) >= limit*3 {
-						break // cap queue growth; BFS already has enough work
+					// Global queue-depth cap: stop feeding once the crawl is
+					// already at the limit, so the queue can never carry a
+					// large multiple of `limit` worth of wasted scrapes.
+					if len(results)+queued >= limit {
+						break
 					}
 					visited[normalized] = true
 					pending++
+					queued++
 					newEntries = append(newEntries, queueEntry{url: normalized, depth: entry.depth + 1})
 				}
 				mu.Unlock()
@@ -258,8 +316,14 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 				for _, e := range newEntries {
 					select {
 					case queue <- e:
-					case <-ctx.Done():
+					case <-stop:
 						return
+					default:
+						// Buffer full — drop the entry and undo its accounting.
+						mu.Lock()
+						queued--
+						pending--
+						mu.Unlock()
 					}
 				}
 			}
@@ -280,9 +344,23 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 	}
 	wg.Wait()
 
+	// Capture the termination reason BEFORE waking the watchdog: cancel()
+	// below makes crawlCtx.Err() report cancellation unconditionally.
+	ctxErr := crawlCtx.Err()
+
+	// Wake the watchdog (it blocks on crawlCtx.Done) and join it so no
+	// goroutine outlives this call. cancel() is deferred as a safety net;
+	// it is idempotent.
+	cancel()
+	<-watchDone
+
 	status := "completed"
-	if ctx.Err() != nil {
-		status = "cancelled"
+	if ctxErr != nil {
+		if errors.Is(ctxErr, context.DeadlineExceeded) {
+			status = "timeout"
+		} else {
+			status = "cancelled"
+		}
 	} else if len(failed) > 0 && len(results) == 0 {
 		status = "failed"
 	} else if len(failed) > 0 {
@@ -309,11 +387,15 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 	return crawlResult, nil
 }
 
-// scrapeWithRetry scrapes a URL with up to 2 retries and exponential
-// backoff (1s, 2s) for transient failures. 4xx errors are never retried.
+// scrapeWithRetry scrapes a URL with up to crawlMaxRetries retries and
+// exponential backoff (1s, 2s, …) for transient failures. Each attempt is
+// bounded by scrapeTimeout (CRAWL_SCRAPE_TIMEOUT) so a slow site can't pin
+// a worker. 4xx errors are never retried (429s included — retrying without
+// honoring Retry-After would just pile on more throttled requests).
 func scrapeWithRetry(ctx context.Context, svc *scraper.Service, url, mode string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+	maxRetries := crawlMaxRetries()
 	var lastErr error
-	for attempt := 0; attempt <= 2; attempt++ {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-time.After(time.Duration(attempt) * time.Second):
@@ -321,7 +403,9 @@ func scrapeWithRetry(ctx context.Context, svc *scraper.Service, url, mode string
 				return nil, ctx.Err()
 			}
 		}
-		result, err := svc.Scrape(ctx, url, mode, opts)
+		attemptCtx, cancel := context.WithTimeout(ctx, scrapeTimeout())
+		result, err := svc.Scrape(attemptCtx, url, mode, opts)
+		cancel()
 		if err == nil {
 			return result, nil
 		}
@@ -344,6 +428,24 @@ func crawlConcurrency() int {
 // host (env CRAWL_DOMAIN_DELAY seconds, default 1s).
 func domainDelay() time.Duration {
 	return time.Duration(clampEnvInt("CRAWL_DOMAIN_DELAY", 1, 0, 60)) * time.Second
+}
+
+// crawlTimeout returns the internal crawl deadline (env CRAWL_TIMEOUT
+// minutes, default 30, clamped to 5–720).
+func crawlTimeout() time.Duration {
+	return time.Duration(clampEnvInt("CRAWL_TIMEOUT", 30, 5, 720)) * time.Minute
+}
+
+// scrapeTimeout returns the per-attempt scrape deadline inside a crawl
+// (env CRAWL_SCRAPE_TIMEOUT seconds, default 30, clamped to 5–300).
+func scrapeTimeout() time.Duration {
+	return time.Duration(clampEnvInt("CRAWL_SCRAPE_TIMEOUT", 30, 5, 300)) * time.Second
+}
+
+// crawlMaxRetries returns the number of retries per URL (env
+// CRAWL_MAX_RETRIES, default 2, clamped to 0–5).
+func crawlMaxRetries() int {
+	return clampEnvInt("CRAWL_MAX_RETRIES", 2, 0, 5)
 }
 
 // clampEnvInt reads an integer env var, returning fallback when unset or
@@ -374,6 +476,11 @@ func hostOf(rawURL string) string {
 
 // filterByPatterns applies include/exclude glob patterns (matched against
 // the URL path). Exclusions win; an empty include list allows everything.
+//
+// Patterns support the full glob syntax of gobwas/glob: `*` matches within
+// a path segment, `**` crosses segments (e.g. `/blog/**`), and `?`, `[abc]`,
+// `{a,b}` work as usual. Note that the seed URL bypasses these filters — it
+// is always scraped.
 func filterByPatterns(links []string, include, exclude []string) []string {
 	if len(include) == 0 && len(exclude) == 0 {
 		return links
@@ -396,10 +503,19 @@ func filterByPatterns(links []string, include, exclude []string) []string {
 	return out
 }
 
-// matchesAny reports whether path matches any glob pattern.
+// matchesAny reports whether p matches any glob pattern. Patterns are
+// compiled with '/' as the path separator (gobwas/glob): `*` stays within a
+// segment, `**` crosses segments — so `/blog/*` matches `/blog/post` but not
+// `/blog/a/b/post`, while `/blog/**` matches both (and `/blog/`). Note that
+// `/blog/**` does not match the bare `/blog` path (the pattern carries a
+// trailing slash); use `/blog` or `/blog{,/**}` for that.
 func matchesAny(patterns []string, p string) bool {
 	for _, pat := range patterns {
-		if ok, _ := path.Match(pat, p); ok {
+		g, err := glob.Compile(pat, '/')
+		if err != nil {
+			continue
+		}
+		if g.Match(p) {
 			return true
 		}
 	}

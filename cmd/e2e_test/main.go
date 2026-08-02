@@ -26,9 +26,30 @@ type CrawlResponse struct {
 }
 
 type CrawlStatusResponse struct {
-	ID     string      `json:"id"`
-	Status string      `json:"state"`
-	Result interface{} `json:"result,omitempty"`
+	ID    string       `json:"id"`
+	State string       `json:"state"` // asynq state: pending/active/completed/failed
+	Crawl *CrawlResult `json:"crawl"`
+}
+
+// CrawlResult mirrors the clean crawl object rebuilt by GET /v1/crawl/:id.
+type CrawlResult struct {
+	Status     string      `json:"status"` // completed / partial / failed / timeout / cancelled
+	TotalPages int         `json:"total_pages"`
+	MaxDepth   int         `json:"max_depth"`
+	Limit      int         `json:"limit"`
+	Pages      []CrawlPage `json:"pages"`
+	FailedURLs []FailedURL `json:"failed_urls,omitempty"`
+}
+
+type CrawlPage struct {
+	URL     string `json:"url"`
+	Title   string `json:"title,omitempty"`
+	Preview string `json:"preview,omitempty"`
+}
+
+type FailedURL struct {
+	URL   string `json:"url"`
+	Error string `json:"error"`
 }
 
 func main() {
@@ -149,16 +170,21 @@ func runCrawlTest(targetURL string, outputPath string) (string, error) {
 			continue
 		}
 
-		fmt.Printf("Polling status... %s\n", status.Status)
+		fmt.Printf("Polling status... %s\n", status.State)
 
-		if status.Status == "completed" {
+		// A completed asynq task carries the crawl object; failed/archived
+		// tasks are surfaced as state "failed" (archived is remapped server-side).
+		if status.State == "completed" && status.Crawl != nil {
+			if status.Crawl.Status == "failed" {
+				return "", fmt.Errorf("task failed remotely")
+			}
 			// Save full result
 			if err := os.WriteFile(outputPath, body, 0644); err != nil {
 				return "", err
 			}
-			return status.Status, nil
+			return status.Crawl.Status, nil
 		}
-		if status.Status == "failed" {
+		if status.State == "failed" {
 			return "", fmt.Errorf("task failed remotely")
 		}
 	}

@@ -44,6 +44,15 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.
 		})
 	})
 
+	// Liveness probes: unauthenticated so load balancers and uptime
+	// monitors can check the API without an API key.
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "cinder"})
+	})
+	r.GET("/v1/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "cinder"})
+	})
+
 	// Swagger Docs mapping
 	if cfg.Server.Mode == "debug" {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
