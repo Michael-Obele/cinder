@@ -7,7 +7,7 @@
 
 **Cinder** is a high-performance, self-hosted web scraping API built with Go. It turns any website into LLM-ready markdown, designed as a drop-in alternative to Firecrawl.
 
-> **Why Cinder?** Heavily optimized for low-memory, serverless, and "hobby tier" environments by using intelligent browser process management and a unified "monolith" architecture.
+> **Why Cinder?** Heavily optimized for low-memory, serverless, and "hobby tier" environments by using intelligent browser process management and a unified "monolith" architecture. Deploys cleanly on Fly.io, Railway, Leapcell, or any Docker host.
 
 ---
 
@@ -34,17 +34,19 @@
 ### Prerequisites
 
 - **Go 1.25+** (for local development)
-- **Redis** (Required for `/crawl` endpoints, optional for simple `/scrape`)
+- **Redis** (Required for `/crawl`, `/batch`, and `/monitor` endpoints, optional for simple `/scrape`)
 - **Chromium** (Installed automatically in Docker or Linux systems)
 
 ### System Requirements
 
 - **Memory**:
   - Minimum: 512MB (basic scraping only, no JS rendering)
-  - Recommended: 2GB (comfortable for dynamic scraping + async queue)
+  - Recommended: 1-2GB (comfortable for dynamic scraping + async queue)
   - Hobby Tier (4GB): Perfect for production use
 - **CPU**: 1+ cores (single core works, multiple cores improve concurrency)
 - **Disk**: 50MB (binary + dependencies)
+
+> **Fly.io default**: the included `fly.toml` runs on a 1GB shared-CPU machine with 1GB swap — plenty for moderate dynamic workloads thanks to browser recycling (`CHROME_RECYCLE_AFTER`). Cinder runs anywhere Docker does: Fly.io, Railway, Leapcell, VPS, or bare metal.
 
 ### Local Installation & Running
 
@@ -58,17 +60,18 @@ go mod download
 
 # Create .env (optional, uses defaults)
 cat > .env << 'EOF'
-PORT=8080
+SERVER_PORT=8080
 SERVER_MODE=debug
 LOG_LEVEL=info
-# REDIS_URL=redis://localhost:6379  # Optional, for async crawling
+# REDIS_URL=redis://localhost:6379  # Optional, for /crawl, /batch, /monitor
+# API_KEYS=sk_a,sk_b               # Optional; when set, /v1/* requires X-API-Key
 EOF
 
 # Run (Monolith Mode)
 go run ./cmd/api
 ```
 
-Visit `http://localhost:8080` (returns 404, which is expected—API is at `/v1/scrape`, `/v1/crawl`, etc.)
+Visit `http://localhost:8080` — the root returns a JSON service overview listing every endpoint under `/v1`.
 
 ### Quick Test
 
@@ -89,7 +92,7 @@ docker build -t cinder .
 
 # Run with environment variables
 docker run -p 8080:8080 \
-  -e PORT=8080 \
+  -e SERVER_PORT=8080 \
   -e SERVER_MODE=release \
   cinder
 
@@ -101,18 +104,34 @@ docker run -p 8080:8080 \
 
 ### Deployment Guides
 
+#### Fly.io (Recommended)
+
+- **Why**: cheap autoscaling Machines, global regions, and `auto_stop`/`auto_start` (already in the included `fly.toml`) keep cost near zero when idle
+- **Setup**: `fly launch`, then `fly deploy` — the included `fly.toml` runs a 1GB shared-CPU machine with 1GB swap
+- **Config**: set `SERVER_MODE=release`; add `REDIS_URL` (e.g. Upstash) and `BRAVE_SEARCH_API_KEY` as secrets
+- **Memory**: 1GB is fine for moderate dynamic scraping thanks to browser recycling
+
+```bash
+fly secrets set REDIS_URL=rediss://... BRAVE_SEARCH_API_KEY=...
+fly deploy
+```
+
 #### Railway
 
 - Dockerfile support: ✅ Native
 - Environment: Set `SERVER_MODE=release`
 - Memory: Hobby Tier (512MB) recommended
 
-#### Leapcell (Recommended for Hobby Projects)
+#### Leapcell (Great for Hobby Projects)
 
-- **Why**: 4GB RAM + Unlimited concurrent requests (pay per compute minutes)
+- **Why**: 4GB RAM + pay-per-compute-minute billing
 - **Cost**: ~$5-15/month for moderate traffic
 - **Setup**: Push Docker image, set env vars
 - **Note**: Monolith Mode perfectly fits the resource constraints
+
+#### Any Docker Host (VPS, ECS, etc.)
+
+Cinder is a single static binary in a Docker image — it runs anywhere containers run. No platform-specific APIs are used; Redis is the only external dependency, and only for queue/batch/monitor features.
 
 #### Vercel
 
@@ -151,6 +170,7 @@ curl -X POST http://localhost:8080/v1/scrape \
   - `smart` (default): Auto-detect static vs dynamic
   - `static`: Use Colly (fast, lightweight)
   - `dynamic`: Use Chromedp (handles JavaScript)
+- and more: `images`, `image_format`, `max_images`, `screenshot_opts`, `actions`, `extract_schema`, `summary`, `redact_pii`, `block_ads` — full parameter table in `docs/guides/API_REFERENCE.md`
 
 **Response (200 OK):**
 
@@ -188,7 +208,13 @@ curl -X POST http://localhost:8080/v1/crawl \
 **Parameters:**
 
 - `url` (required): Root URL to start crawling
-- `render` (optional): Force dynamic rendering (default: false)
+- `render` (optional): Force dynamic rendering (default: `false`)
+- `maxDepth` (optional): Link depth to follow (default `2`, max `10`)
+- `limit` (optional): Max pages to scrape (default `10`, max `100`)
+- `include_paths` / `exclude_paths` (optional): Glob patterns controlling which paths are followed (exclusion wins)
+- `webhook_url` / `webhook_secret` (optional): POST the result on completion, signed with `X-Cinder-Signature` (HMAC-SHA256)
+
+> Crawls run **in parallel** (env `CRAWL_CONCURRENCY`) with per-domain politeness, retries with backoff, and never retry 4xx errors.
 
 **Response (202 Accepted):**
 
@@ -196,7 +222,11 @@ curl -X POST http://localhost:8080/v1/crawl \
 {
   "id": "asynq:task:uuid-here",
   "url": "https://example.com/blog",
-  "render": false
+  "render": false,
+  "screenshot": false,
+  "images": false,
+  "maxDepth": 2,
+  "limit": 10
 }
 ```
 
@@ -221,10 +251,20 @@ curl http://localhost:8080/v1/crawl/asynq:task:uuid-here
   "id": "asynq:task:uuid-here",
   "queue": "default",
   "state": "completed",
-  "max_retry": 3,
-  "retried": 0,
-  "payload": "{\"url\":\"https://example.com/blog\",\"render\":false}",
-  "result": "{\"urls_scraped\": 15, ...}"
+  "crawl": {
+    "status": "completed",
+    "total_pages": 15,
+    "max_depth": 2,
+    "limit": 10,
+    "pages": [
+      {
+        "url": "https://example.com/blog/post-1",
+        "title": "Post 1",
+        "preview": "First 300 characters of the page markdown..."
+      }
+    ]
+  },
+  "failed_urls": []
 }
 ```
 
@@ -250,6 +290,86 @@ curl -X POST http://localhost:8080/v1/search \
 
 ---
 
+### 5. Map a Website (URL Discovery)
+
+Discover a site's URLs from `robots.txt`/`sitemap.xml` (falling back to one-level link discovery) without scraping content. No Redis required.
+
+`POST /v1/map`
+
+```bash
+curl -X POST http://localhost:8080/v1/map \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "search": "/docs", "limit": 200}'
+```
+
+**Parameters:** `url` (required), `search` (optional substring filter), `limit` (default `100`, max `5000`).
+
+**Response:**
+
+```json
+{
+  "url": "https://example.com",
+  "count": 2,
+  "links": [
+    { "url": "https://example.com/docs/intro", "source": "sitemap" },
+    { "url": "https://example.com/docs/api", "source": "link" }
+  ]
+}
+```
+
+---
+
+### 6. Batch Scrape
+
+Enqueue up to 20 URLs at once as individual queue jobs under one batch ID. Requires Redis.
+
+`POST /v1/batch/scrape` → returns `batch_id` + per-task IDs · `GET /v1/batch/:id` → aggregated status
+
+```bash
+curl -X POST http://localhost:8080/v1/batch/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["https://a.example.com", "https://b.example.com"]}'
+```
+
+---
+
+### 7. Change-Tracking Monitor
+
+Scrape a URL on a schedule, hash the markdown, and fire a signed webhook when content changes. The first check records the baseline without notifying. Requires Redis.
+
+`POST /v1/monitor` → create · `GET /v1/monitor/:id` → status · `DELETE /v1/monitor/:id` → stop
+
+```bash
+curl -X POST http://localhost:8080/v1/monitor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://pricing.example.com",
+    "interval_seconds": 3600,
+    "webhook_url": "https://myapp.example.com/hooks/cinder",
+    "webhook_secret": "s3cret"
+  }'
+```
+
+Minimum `interval_seconds`: 3600 (1 hour).
+
+---
+
+### 8. Authentication & Rate Limiting
+
+Optional and env-configured — with no keys set, the API stays open. When `API_KEYS` is set, every `/v1/*` request must send the `X-API-Key` header.
+
+```bash
+# env: API_KEYS=sk_a,sk_b  RATE_LIMIT_RPM=60
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sk_a" \
+  -d '{"url": "https://example.com"}'
+```
+
+Exceeding the rate limit returns `429` with a `retry_after` hint. Redis-backed limiting when `REDIS_URL` is set; in-memory fallback otherwise.
+
+---
+
 ## 📋 Scraping Modes Explained
 
 | Mode        | Engine      | Speed       | JS Support   | Best For               |
@@ -267,19 +387,25 @@ curl -X POST http://localhost:8080/v1/search \
 
 ## 🔧 Environment Variables
 
-| Variable               | Default | Required      | Description                                                   |
-| ---------------------- | ------- | ------------- | ------------------------------------------------------------- |
-| `PORT`                 | `8080`  | No            | HTTP server port                                              |
-| `SERVER_MODE`          | `debug` | No            | Server mode: `debug`, `release`, `test`                       |
-| `LOG_LEVEL`            | `info`  | No            | Log level: `debug`, `info`, `warn`, `error`                   |
-| `REDIS_URL`            | (none)  | Conditional\* | Redis connection URL (e.g., `redis://localhost:6379`)         |
-| `REDIS_HOST`           | (none)  | Conditional\* | Redis host (alternative to `REDIS_URL`)                       |
-| `REDIS_PORT`           | `6379`  | Conditional\* | Redis port                                                    |
-| `REDIS_PASSWORD`       | (none)  | Conditional\* | Redis password                                                |
-| `BRAVE_SEARCH_API_KEY` | (none)  | No            | API key for Brave Search endpoint                             |
-| `DISABLE_WORKER`       | `false` | No            | Set to `true` to disable embedded worker (microservices mode) |
+| Variable               | Default | Required      | Description                                                          |
+| ---------------------- | ------- | ------------- | -------------------------------------------------------------------- |
+| `SERVER_PORT`          | `8080`  | No            | HTTP server port                                                     |
+| `SERVER_MODE`          | `debug` | No            | Server mode: `debug`, `release`, `test`                              |
+| `LOG_LEVEL`            | `info`  | No            | Log level: `debug`, `info`, `warn`, `error`                          |
+| `REDIS_URL`            | (none)  | Conditional\* | Redis connection URL (e.g., `redis://localhost:6379`)                |
+| `REDIS_HOST`           | (none)  | Conditional\* | Redis host (alternative to `REDIS_URL`)                              |
+| `REDIS_PORT`           | `6379`  | Conditional\* | Redis port                                                           |
+| `REDIS_PASSWORD`       | (none)  | Conditional\* | Redis password                                                       |
+| `BRAVE_SEARCH_API_KEY` | (none)  | No            | API key for Brave Search endpoint                                    |
+| `DISABLE_WORKER`       | `false` | No            | Set to `true` to disable embedded worker (microservices mode)        |
+| `CHROME_RECYCLE_AFTER` | `100`   | No            | Restart the Chrome allocator after N scrapes to bound memory growth  |
+| `CRAWL_CONCURRENCY`    | `4`     | No            | Parallel crawl workers (1-10)                                        |
+| `CRAWL_DOMAIN_DELAY`   | `1`     | No            | Minimum seconds between requests to the same host during a crawl     |
+| `WEBHOOK_TIMEOUT`      | `10`    | No            | Webhook delivery timeout in seconds                                  |
+| `API_KEYS`             | (none)  | No            | Comma-separated keys; enables `X-API-Key` auth on `/v1/*`            |
+| `RATE_LIMIT_RPM`       | `0`     | No            | Per-client requests/minute (0 = unlimited)                           |
 
-**Note:** \*Redis is required for `/v1/crawl` endpoints. Without it, they return **503 Service Unavailable**.
+**Note:** \*Redis is required for `/v1/crawl`, `/v1/batch/*`, and `/v1/monitor*` endpoints. Without it, they return **503 Service Unavailable**.
 
 ---
 
@@ -351,7 +477,7 @@ Validate URL → Create Task → Enqueue Job → Return Job ID
 - **Singleton Allocator**: One Chromium process per container instance
 - **Tab Pooling**: Each scrape request creates a lightweight tab (`chromedp.NewContext`)
 - **Memory Efficiency**: ~200-300MB total for browser + API server
-- **Concurrency**: 10 concurrent tabs (configurable via `internal/worker/server.go`)
+- **Concurrency**: 5 queue workers (configurable in `internal/worker/server.go`) + a parallel crawl pool (`CRAWL_CONCURRENCY`, default 4)
 
 **Performance Impact:**
 
@@ -377,8 +503,8 @@ Validate URL → Create Task → Enqueue Job → Return Job ID
 
 - **Graceful Degradation**: Falls back to static scraping if dynamic fails
 - **Circuit Breaker**: Redis unavailability doesn't crash the API
-- **Health Checks**: Browser process monitoring (planned for Phase 5)
-- **Result Caching**: Redis-backed response caching reduces duplicate work
+- **Browser Recycling**: Chrome allocator restarts after `CHROME_RECYCLE_AFTER` scrapes (default 100) to bound memory growth
+- **Result Caching**: Redis-backed, option-aware response caching reduces duplicate work
 
 #### Design Decisions
 
@@ -434,8 +560,8 @@ Typical latencies on a 2GB instance with hot browser:
 - **Cause**: Chrome memory leak after N pages
 - **Solution**:
   - Increase container memory (switch to 2GB+ tier)
-  - Reduce concurrent workers (lower `Concurrency` in `internal/worker/server.go`)
-  - Enable browser restart after N requests (planned for Phase 5)
+  - Lower `CRAWL_CONCURRENCY` (fewer parallel tabs)
+  - Set `CHROME_RECYCLE_AFTER=50` to restart the browser more frequently (default: 100 scrapes)
 
 ### No Redis = `/crawl` Returns 503
 
@@ -452,7 +578,8 @@ Typical latencies on a 2GB instance with hot browser:
 - **Cause**: Site not fully hydrated before HTML capture
 - **Solution**:
   - Try `mode=dynamic` explicitly
-  - Increase page load timeout (future feature)
+  - Add page actions to wait for content: `"actions": [{"type": "wait_selector", "selector": "#app"}]`
+  - Scroll lazy-loaded content: `"actions": [{"type": "scroll_to_bottom"}]`
   - Check browser console logs: `LOG_LEVEL=debug`
 
 ### Slow Performance
@@ -472,19 +599,21 @@ Typical latencies on a 2GB instance with hot browser:
 
 ## �🗺️ Roadmap & Status
 
-| Phase       | Goal                          | Status         |
-| :---------- | :---------------------------- | :------------- |
-| **Phase 1** | Static Scraping (Colly)       | ✅ Done        |
-| **Phase 2** | Dynamic Scraping (Chromedp)   | ✅ Done        |
-| **Phase 3** | Async Queue (Asynq + Redis)   | ✅ Done        |
-| **Phase 4** | Performance Tuning (Monolith) | ✅ Done        |
-| **Phase 5** | Hardening & Testing           | 🚧 In Progress |
+| Phase       | Goal                                                                  | Status      |
+| :---------- | :-------------------------------------------------------------------- | :---------- |
+| **Phase 1** | Static Scraping (Colly)                                               | ✅ Done     |
+| **Phase 2** | Dynamic Scraping (Chromedp)                                           | ✅ Done     |
+| **Phase 3** | Async Queue (Asynq + Redis)                                           | ✅ Done     |
+| **Phase 4** | Polish & Auth (API keys, rate limiting)                               | ✅ Done     |
+| **Phase 5** | High Performance & Reliability (browser recycling, parallel crawl)    | ✅ Done     |
+| **Phase 6** | Cinder v2 (images v2, map, batch, actions, monitors, extraction)      | ✅ Done     |
 
 **Current Focus**:
 
-- Adding a comprehensive Unit & Integration Test Suite (Currently 0% coverage).
-- Implementing "Smart Wait" heuristics for slower SPAs.
-- Adding a "Browser Health Check" to kill/restart Chrome after N scrapes.
+- **Stealth tier**: TLS fingerprint spoofing (`refraction-networking/utls`) + CDP stealth-script injection for Cloudflare/DataDome-protected sites.
+- **PDF & documents**: parse PDFs and other non-HTML assets in `/v1/scrape` (Firecrawl parity).
+- **Benchmarks**: `pprof` profiles + benchmark suite for scraper and image-processing hot paths.
+- **Heuristic "smart wait"**: network-idle detection and configurable readiness conditions beyond the current selector/scroll actions.
 
 ---
 
@@ -492,19 +621,10 @@ Typical latencies on a 2GB instance with hot browser:
 
 Contributions are welcome! This project is in **active development** and priorities are:
 
-1. **Unit & Integration Tests** (Currently 0% coverage)
-   - `internal/domain/scraper_test.go`
-   - `internal/api/handlers/scrape_test.go`
-   - `internal/scraper/chromedp_test.go`
-
-2. **Smart Waiting Strategies** for SPAs
-   - Network idle detection
-   - Configurable wait conditions
-   - Better heuristics for "page ready"
-
-3. **Browser Health Check**
-   - Restart browser after N requests to prevent memory leaks
-   - Automatic OOM recovery
+1. **Stealth & anti-bot** — TLS fingerprint spoofing (`utls`) and CDP stealth-script injection for Cloudflare/DataDome-protected sites.
+2. **PDF & documents** — parse PDFs (and other non-HTML assets) in `/v1/scrape`.
+3. **Benchmarks** — `pprof` + benchmark suite for the scraper and image-processing hot paths.
+4. **Heuristic "smart wait"** — network-idle detection and configurable page-readiness conditions.
 
 **How to Contribute:**
 
@@ -520,7 +640,7 @@ Contributions are welcome! This project is in **active development** and priorit
 - Use `go fmt` for formatting
 - Add structured logging via `pkg/logger`
 - Include error handling (avoid silent failures)
-- Test your code locally: `go test ./...`
+- Test your code locally: `make check` (gofmt, vet, staticcheck, tests with `-race`)
 
 ---
 
