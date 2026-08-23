@@ -14,6 +14,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/safeurl"
 	"github.com/standard-user/cinder/pkg/logger"
 )
 
@@ -222,6 +223,14 @@ func resolveScreenshotParams(opts *domain.ScreenshotOptions) screenshotParams {
 }
 
 func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+	// Chrome makes the connection itself, so the dial-time guard used on our
+	// own http.Clients cannot reach it. Validate up front instead. This does
+	// not cover in-page redirects or subresources; treat it as a guard on
+	// what the caller asked for, not a browser sandbox.
+	if err := safeurl.Check(ctx, url); err != nil {
+		return nil, err
+	}
+
 	// Create a new tab (Context) from the existing allocator
 	// This is much faster than starting a new browser process
 	taskCtx, cancelTask := chromedp.NewContext(s.beginScrape())
@@ -308,18 +317,18 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 		return nil, fmt.Errorf("empty response from browser")
 	}
 
-	// Extract the main content before markdown conversion so nav/ads/footers
-	// don't pollute the LLM-ready output. Falls back to full HTML on failure.
-	rc, _ := ExtractMainContent(htmlContent, url)
-
-	// Apply cleaner-output defaults (block ads, drop base64 images) unless
-	// the caller explicitly disabled them.
-	clean := cleanContent(rc.ContentHTML,
+	// Apply cleaner-output defaults (block ads, drop base64 images) before
+	// readability strips the class/id/aria-label attributes the selectors need.
+	clean := cleanContent(htmlContent,
 		opts.BlockAds == nil || *opts.BlockAds,
 		opts.RemoveBase64Images == nil || *opts.RemoveBase64Images,
 	)
 
-	markdown, err := md.ConvertString(clean)
+	// Extract the main content after cleaning so nav/ads/footers don't pollute
+	// the LLM-ready output. Falls back to full HTML on failure.
+	rc, _ := ExtractMainContent(clean, url)
+
+	markdown, err := md.ConvertString(rc.ContentHTML)
 	if err != nil {
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/safeurl"
 )
 
 const (
@@ -28,11 +29,13 @@ type Processor struct {
 }
 
 // NewProcessor creates a new image processor.
+//
+// The client refuses non-public destinations: image URLs come from scraped
+// page markup, so a hostile page can point <img src> at an internal service
+// and use the returned blob to exfiltrate it.
 func NewProcessor() *Processor {
 	return &Processor{
-		client: &http.Client{
-			Timeout: FetchTimeout,
-		},
+		client: safeurl.Client(FetchTimeout),
 	}
 }
 

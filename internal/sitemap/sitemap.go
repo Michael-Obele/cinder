@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/standard-user/cinder/internal/safeurl"
 )
 
 // DefaultMaxURLs caps total discovered URLs.
@@ -27,8 +28,10 @@ type DiscoveredURL struct {
 	Source string `json:"source"` // "sitemap" or "link"
 }
 
-// client is a shared HTTP client with a sane timeout.
-var client = &http.Client{Timeout: 20 * time.Second}
+// client is a shared HTTP client with a sane timeout. It refuses non-public
+// destinations: the seed URL and every sitemap/link it discovers are
+// attacker-influenced, and sitemap traversal follows them recursively.
+var client = safeurl.Client(20 * time.Second)
 
 // Discover returns URLs for a site, preferring sitemap.xml entries and
 // falling back to one-level link discovery from the seed page.

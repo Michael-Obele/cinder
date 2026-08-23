@@ -20,19 +20,35 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// cacheStore is the slice of the Redis client the scrape cache actually uses.
+// Narrowing it to these two methods is what lets tests exercise the cache read
+// and write paths against an in-memory fake instead of a live server;
+// *redis.Client satisfies it as-is.
+type cacheStore interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+}
+
 // Service acts as the main entry point and chooses the right scraper
 type Service struct {
 	colly    domain.Scraper
 	chromedp domain.Scraper
-	redis    *redis.Client
+	cache    cacheStore
 }
 
-func NewService(colly domain.Scraper, chromedp domain.Scraper, redis *redis.Client) *Service {
-	return &Service{
+func NewService(colly domain.Scraper, chromedp domain.Scraper, rdb *redis.Client) *Service {
+	s := &Service{
 		colly:    colly,
 		chromedp: chromedp,
-		redis:    redis,
 	}
+	// Assign only a real client. A nil *redis.Client stored in an interface
+	// makes a non-nil interface holding a nil pointer, so the `s.cache != nil`
+	// guards below would pass and then dereference it — and callers do pass nil
+	// when Redis is not configured.
+	if rdb != nil {
+		s.cache = rdb
+	}
+	return s
 }
 
 // cacheKeyFor builds a deterministic cache key from the URL, mode, and the
@@ -71,8 +87,8 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 
 	// 1. Try Cache
 	cacheKey := cacheKeyFor(url, mode, opts)
-	if s.redis != nil {
-		val, err := s.redis.Get(ctx, cacheKey).Result()
+	if s.cache != nil {
+		val, err := s.cache.Get(ctx, cacheKey).Result()
 		if err == nil {
 			// Try decompressing
 			// Note: val is string, convert to byte
@@ -141,32 +157,42 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		// 1. Try static first (fast & cheap)
 		result, err = runStatic()
 
-		// If static failed or produced suspicious content, try dynamic
+		// Decide whether dynamic is worth a second attempt.
 		needsDynamic := false
 		if err != nil {
-			// If it's a 403/Forbidden, dynamic might help (headless often gets past basic blocks)
-			// For now, let's treat errors as candidates for retry if we want robustness.
-			// However, simple connectivity errors won't be fixed by headless.
-			// Let's focus on content heuristics for now.
-			// If err IS NOT nil, we return it, UNLESS we want to be very aggressive.
-			// Let's keep it simple: if static fails, we fail, unless it's a specific "empty response" error we added.
+			// Not every static failure is worth retrying: DNS and connection
+			// errors fail identically in a browser, and retrying doubles the
+			// latency of an already-failed request. Retry only the failures a
+			// real browser plausibly fixes — bot blocks keyed on the absence
+			// of a JS runtime, and empty bodies.
+			needsDynamic = worthRetryingDynamic(err)
+			if needsDynamic {
+				logger.Log.Info("Static scrape failed in a way a browser may fix; retrying dynamic",
+					"url", url, "error", err)
+			}
 		} else if result != nil {
 			// Check heuristics
 			if ShouldUseDynamic(result.HTML) {
 				needsDynamic = true
+				logger.Log.Info("Heuristics detected an SPA shell; switching to Chromedp", "url", url)
 			}
 		}
 
 		if needsDynamic {
-			fmt.Printf("Smart Scraper: Heuristics detected dynamic content for %s. Switching to Chromedp.\n", url)
 			dynamicResult, dynErr := runDynamic()
-			if dynErr == nil {
-				result = dynamicResult
-			} else {
-				// If dynamic fails but static succeeded, return static?
-				// Or fail because the page is likely broken?
-				// Let's return dynamic error if static was deemed insufficient.
-				err = dynErr
+			switch {
+			case dynErr == nil:
+				result, err = dynamicResult, nil
+			case err != nil:
+				// Both engines failed. Report the static error: it is the
+				// original cause, and the dynamic retry was speculative.
+				logger.Log.Warn("Dynamic retry also failed", "url", url, "error", dynErr)
+			default:
+				// Static succeeded but looked like a shell, and dynamic
+				// failed. The static result is thin but real, so return it
+				// rather than failing a request we can partially answer.
+				logger.Log.Warn("Dynamic retry failed; falling back to the static result",
+					"url", url, "error", dynErr)
 			}
 		}
 	default:
@@ -270,7 +296,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 	}
 
 	// 4. Save to Cache
-	if s.redis != nil {
+	if s.cache != nil {
 		data, err := json.Marshal(result)
 		if err == nil {
 			// Compress data
@@ -279,7 +305,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 			if _, err := gz.Write(data); err == nil {
 				gz.Close()
 				// Store for 7 days as requested (low storage usage allows this)
-				s.redis.Set(ctx, cacheKey, b.Bytes(), 7*24*time.Hour)
+				s.cache.Set(ctx, cacheKey, b.Bytes(), 7*24*time.Hour)
 			}
 		}
 	}

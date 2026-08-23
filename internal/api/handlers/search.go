@@ -39,7 +39,7 @@ func NewSearchHandler(s search.Service) *SearchHandler {
 
 // Search godoc
 // @Summary      Search the web
-// @Description  Searches the web using the configured search provider (Brave Search) and returns a list of matching results.
+// @Description  Searches the web using DuckDuckGo HTML (free, no key) with Brave Search as fallback when BRAVE_SEARCH_API_KEY is set.
 // @Tags         search
 // @Accept       json
 // @Produce      json

@@ -9,6 +9,7 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/gocolly/colly/v2"
 	"github.com/standard-user/cinder/internal/domain"
+	"github.com/standard-user/cinder/internal/safeurl"
 	"github.com/standard-user/cinder/pkg/logger"
 )
 
@@ -23,6 +24,11 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 	c := colly.NewCollector(
 		colly.Async(true),
 	)
+
+	// Refuse non-public destinations. The guarded transport checks at dial
+	// time, so it covers colly's redirect following as well as the initial
+	// request — a pre-flight URL check alone would not.
+	c.WithTransport(safeurl.Transport())
 
 	// Rotate User-Agents
 	c.OnRequest(func(r *colly.Request) {
@@ -63,19 +69,19 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 		return nil, fmt.Errorf("empty response")
 	}
 
-	// Extract the main content before markdown conversion so nav/ads/footers
-	// don't pollute the LLM-ready output. Falls back to full HTML on failure.
-	rc, _ := ExtractMainContent(htmlContent, url)
-
-	// Apply cleaner-output defaults (block ads, drop base64 images) unless
-	// the caller explicitly disabled them.
-	clean := cleanContent(rc.ContentHTML,
+	// Apply cleaner-output defaults (block ads, drop base64 images) before
+	// readability strips the class/id/aria-label attributes the selectors need.
+	clean := cleanContent(htmlContent,
 		opts.BlockAds == nil || *opts.BlockAds,
 		opts.RemoveBase64Images == nil || *opts.RemoveBase64Images,
 	)
 
+	// Extract the main content after cleaning so nav/ads/footers don't pollute
+	// the LLM-ready output. Falls back to full HTML on failure.
+	rc, _ := ExtractMainContent(clean, url)
+
 	// Convert to Markdown
-	markdown, err := md.ConvertString(clean)
+	markdown, err := md.ConvertString(rc.ContentHTML)
 	if err != nil {
 		return nil, fmt.Errorf("markdown conversion failed: %w", err)
 	}

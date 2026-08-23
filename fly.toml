@@ -6,6 +6,11 @@
 app = 'cinder9630'
 primary_region = 'ams'
 
+# Fly sends SIGTERM then SIGKILLs after this. It must exceed SHUTDOWN_TIMEOUT
+# (20s) or the drain gets cut off mid-flight; the default of 5s is far too
+# short for a crawl task to finish handing back its work.
+kill_timeout = '25s'
+
 [build]
   dockerfile = 'Dockerfile'
 
@@ -13,6 +18,10 @@ primary_region = 'ams'
   GIN_MODE = 'release'
   LOG_LEVEL = 'info'
   SERVER_PORT = '8080'
+  # GIN_MODE only configures Gin. Cinder reads its own SERVER_MODE, which
+  # defaults to debug — and debug shells out to `go run swag@latest init` on
+  # every startup and serves Swagger UI publicly. Neither belongs in a deploy.
+  SERVER_MODE = 'release'
 
 [http_service]
   internal_port = 8080

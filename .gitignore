@@ -21,6 +21,14 @@ vendor/
 # Compiled repository binary
 cinder
 
+# Compiled binaries built at the repo root. These were tracked historically;
+# they are build outputs and must not be committed.
+/api
+/app
+/cinder-api
+/cinder-worker
+/worker
+
 # IDEs and editors
 .vscode/
 .idea/
@@ -52,5 +60,12 @@ node_modules/
 .cache/
 .pytest_cache/
 
-# Personal test files
-*.json
+# Personal test files.
+#
+# Scoped deliberately: a bare `*.json` here previously matched EVERY json
+# file in the repo, which silently kept generated API docs
+# (internal/api/docs/swagger.json) out of version control even though the
+# Docker image copies that directory. Keep new patterns this specific.
+/testdata-*.json
+/scratch*.json
+/*.local.json

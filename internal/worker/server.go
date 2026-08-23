@@ -73,8 +73,19 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 			},
 			// 15s poll interval keeps Redis commands well within Upstash
 			// free tier (500K/mo): ~172K checks/mo vs 2.6M at 1s.
+			//
+			// Trade-off worth knowing: asynq's processor sleeps up to this
+			// long uninterruptibly when queues are empty, and Shutdown blocks
+			// until that sleep returns. So this value is also a floor on
+			// shutdown latency — cmd/api overlaps the worker drain with the
+			// HTTP drain to hide it.
 			TaskCheckInterval: 15 * time.Second,
-			Logger:            &AsynqLogger{logger: logger},
+			// How long active workers get to finish before asynq aborts them
+			// and pushes their tasks back to Redis. Must stay below the
+			// process-level SHUTDOWN_TIMEOUT (default 20s) so the re-queue
+			// actually happens instead of being cut off by a SIGKILL.
+			ShutdownTimeout: 10 * time.Second,
+			Logger:          &AsynqLogger{logger: logger},
 		},
 	)
 

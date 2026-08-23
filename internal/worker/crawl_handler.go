@@ -398,7 +398,7 @@ func scrapeWithRetry(ctx context.Context, svc *scraper.Service, url, mode string
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			select {
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-time.After(time.Duration(attempt) * retryBackoffUnit):
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}

@@ -347,8 +347,12 @@ Exceeding the rate limit returns `429` with a `retry_after` hint. Redis-backed l
 | `WEBHOOK_TIMEOUT`      | `10`    | Webhook delivery timeout (s)                                |
 | `API_KEYS`             | (none)  | Comma-separated keys; enables `X-API-Key` auth              |
 | `RATE_LIMIT_RPM`       | `0`     | Per-client requests/min (0 = unlimited)                     |
+| `SSRF_ALLOW_PRIVATE`   | `false` | Set `true` to allow fetching private/loopback addresses     |
+| `SHUTDOWN_TIMEOUT`     | `20`    | Seconds to drain in-flight requests and tasks on SIGTERM    |
 
 > Redis alternatives `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` also supported. Without Redis, queue endpoints return `503`.
+
+> **SSRF:** every outbound fetch (scrape, crawl, sitemap, image, webhook) refuses non-public destinations — loopback, RFC1918, link-local (including the `169.254.169.254` cloud metadata endpoint), CGNAT, and multicast. The check runs at dial time, so redirects and DNS rebinding are covered too. Set `SSRF_ALLOW_PRIVATE=true` only on an instance that is not publicly reachable, e.g. to scrape an internal wiki or a local dev server.
 
 ---
 

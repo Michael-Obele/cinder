@@ -279,12 +279,21 @@ func extractPreview(markdown string, maxLen int) string {
 	if len(runes) <= maxLen {
 		return cleaned
 	}
-	// Cut at the last space before maxLen to avoid word-splitting
+	// Cut at the last space before maxLen to avoid word-splitting, looking back
+	// at most 50 runes. The floor is clamped at zero: a maxLen below the
+	// lookback window would otherwise let cut walk past the start of the string
+	// and index runes[-1].
+	floor := maxLen - 50
+	if floor < 0 {
+		floor = 0
+	}
 	cut := maxLen
-	for cut > maxLen-50 && cut < len(runes) && runes[cut] != ' ' {
+	for cut > floor && cut < len(runes) && runes[cut] != ' ' {
 		cut--
 	}
-	if cut <= maxLen-50 {
+	if cut <= floor {
+		// No space within the window — cut at the limit rather than walking
+		// back arbitrarily far.
 		cut = maxLen
 	}
 	return string(runes[:cut]) + "..."

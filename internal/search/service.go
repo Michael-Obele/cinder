@@ -49,11 +49,18 @@ type Service interface {
 	Search(ctx context.Context, opts SearchOptions) ([]Result, int, error)
 }
 
+// braveEndpoint is the upstream web search endpoint.
+const braveEndpoint = "https://api.search.brave.com/res/v1/web/search"
+
 // BraveService implements Service using Brave Search API
 type BraveService struct {
 	apiKey  string
 	client  *http.Client
 	limiter *rate.Limiter
+	// endpoint is the base URL Search posts to. It is a field rather than a
+	// hardcoded constant so tests can point it at an httptest server; nothing
+	// outside this package sets it.
+	endpoint string
 }
 
 // NewBraveService creates a new instance of BraveService
@@ -64,7 +71,8 @@ func NewBraveService(apiKey string) *BraveService {
 			Timeout: 30 * time.Second,
 		},
 		// Limit to 1 request per 1.1 seconds to be safe and avoid 429s
-		limiter: rate.NewLimiter(rate.Every(1100*time.Millisecond), 1),
+		limiter:  rate.NewLimiter(rate.Every(1100*time.Millisecond), 1),
+		endpoint: braveEndpoint,
 	}
 }
 
@@ -89,7 +97,10 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 		return nil, 0, fmt.Errorf("rate limit wait: %w", err)
 	}
 
-	endpoint := "https://api.search.brave.com/res/v1/web/search"
+	endpoint := s.endpoint
+	if endpoint == "" {
+		endpoint = braveEndpoint
+	}
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)

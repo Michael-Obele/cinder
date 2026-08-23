@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref — a force-push shouldn't leave a
+# stale run burning a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal ./pkg ./test)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: staticcheck
+        run: staticcheck ./...
+
+      # Chromium is preinstalled on ubuntu-latest runners, so the chromedp
+      # tests exercise a real browser rather than skipping.
+      - name: Test (race)
+        run: go test ./... -race -count=1
+
+      - name: Coverage summary
+        run: |
+          go test ./internal/... ./pkg/... -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tail -1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.out
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build binaries
+        run: |
+          go build -o /tmp/cinder-api ./cmd/api
+          go build -o /tmp/cinder-worker ./cmd/worker
+
+      # Catches Dockerfile drift without pushing anything.
+      - name: Docker build
+        run: docker build -t cinder:ci .
