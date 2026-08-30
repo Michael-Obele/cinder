@@ -27,8 +27,9 @@ If you're new to Go, read these in order:
 | [API Reference](API_REFERENCE.md)                             | Complete endpoint docs (scrape, search, crawl)  |
 | [Performance Changes](CHANGELOG_JS.md)                        | How the browser context pool optimization works |
 | [Testing Guide](TESTING.md)                                   | How to run and write Go tests                   |
+| [SearXNG on Fly](SEARXNG_FLY.md)                               | Deploy the self-hosted search backend for /v1/search |
 | **Features Explorer**                                         |                                                 |
-| [Search](../search/service.go)                                | Brave Search API integration (rate-limited)     |
+| [Search](../search/service.go)                                | SearXNG (self-hosted, primary) + Brave fallback |
 | [Screenshot & Images](../features/image-screenshot-feature.md)| Capturing page screenshots and images           |
 | [Image Blob Transport](../features/image-blob-transport.md)   | AI-ready image pipeline (base64 data URIs)      |
 
