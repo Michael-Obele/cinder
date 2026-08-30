@@ -11,10 +11,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// searchCacheTTL bounds how long search results are cached. DuckDuckGo
-// rate-limits aggressively and is slow under load; caching repeat queries
-// turns seconds of upstream latency into a Redis read, and keeps the
-// upstream service healthy by not re-asking it the same question.
+// searchCacheTTL bounds how long search results are cached. SearXNG
+// aggregates many engines and is fast; caching repeat queries turns an
+// upstream round-trip into a Redis read and keeps the engine healthy.
 const searchCacheTTL = 5 * time.Minute
 
 // cachedPayload is the JSON shape stored under a search cache key.
@@ -23,12 +22,20 @@ type cachedPayload struct {
 	Total   int      `json:"total"`
 }
 
+// cacheStore is the slice of the Redis client the search cache uses.
+// Narrowing it to these two methods lets tests drive the cache with an
+// in-memory fake instead of a live server; *redis.Client satisfies it.
+type cacheStore interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+}
+
 // CachedService wraps a Service with a Redis-backed result cache. When Redis
 // is unavailable the cache degrades to a pass-through; a cache miss or write
 // failure never fails the request.
 type CachedService struct {
 	inner Service
-	rdb   *redis.Client
+	cache cacheStore
 }
 
 // NewCachedService wraps inner with a Redis-backed result cache. A nil rdb
@@ -37,7 +44,7 @@ func NewCachedService(inner Service, rdb *redis.Client) Service {
 	if rdb == nil {
 		return inner
 	}
-	return &CachedService{inner: inner, rdb: rdb}
+	return &CachedService{inner: inner, cache: rdb}
 }
 
 // Search returns cached results when available, otherwise performs the
@@ -45,9 +52,9 @@ func NewCachedService(inner Service, rdb *redis.Client) Service {
 func (c *CachedService) Search(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
 	key := searchCacheKey(opts)
 
-	if val, err := c.rdb.Get(ctx, key).Bytes(); err == nil {
+	if val, err := c.cache.Get(ctx, key).Result(); err == nil {
 		var cached cachedPayload
-		if json.Unmarshal(val, &cached) == nil {
+		if json.Unmarshal([]byte(val), &cached) == nil {
 			return cached.Results, cached.Total, nil
 		}
 	}
@@ -57,12 +64,18 @@ func (c *CachedService) Search(ctx context.Context, opts SearchOptions) ([]Resul
 		return nil, 0, err
 	}
 
-	data, err := json.Marshal(cachedPayload{Results: results, Total: total})
-	if err != nil {
-		return results, total, nil
-	}
-	if c.rdb.Set(ctx, key, data, searchCacheTTL).Err() != nil {
-		// Non-fatal: a failed cache write must not fail the search.
+	// Only cache non-empty result sets. A transient empty response from an
+	// upstream engine must not become a sticky 5-minute "no results" for a
+	// query that normally has plenty — SearXNG occasionally returns nothing
+	// when all its engines hiccup at once.
+	if len(results) > 0 {
+		data, err := json.Marshal(cachedPayload{Results: results, Total: total})
+		if err != nil {
+			return results, total, nil
+		}
+		if c.cache.Set(ctx, key, data, searchCacheTTL).Err() != nil {
+			// Non-fatal: a failed cache write must not fail the search.
+		}
 	}
 	return results, total, nil
 }
