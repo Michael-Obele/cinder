@@ -1,0 +1,14 @@
+# Minimal SearXNG settings for Cinder's self-hosted search backend.
+# `use_default_settings: true` keeps the sane defaults; we only enable the
+# JSON API (Cinder queries it) and pin a local secret key.
+use_default_settings: true
+
+server:
+  secret_key: "cinder-local-searxng-secret-4f3a9c1e7b2d"
+  limiter: false
+  public_instance: false
+
+search:
+  formats:
+    - html
+    - json

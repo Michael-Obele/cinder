@@ -29,6 +29,30 @@ func NewDuckService() *DuckService {
 	}
 }
 
+// searchRetries is how many times a transient DuckDuckGo failure is retried
+// before giving up. DDG rate-limits and intermittently 429s under load; a
+// short backoff usually clears it.
+const searchRetries = 2
+
+// retryableDDG reports whether a DuckDuckGo failure is worth retrying.
+// Malformed HTML and 4xx (other than 429) are definitive; 429, 5xx, and
+// network errors are transient.
+func retryableDDG(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "duckduckgo status 429"),
+		strings.Contains(msg, "duckduckgo status 5"),
+		strings.Contains(msg, "duckduckgo request:"),
+		strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "Client.Timeout"):
+		return true
+	}
+	return false
+}
+
 func (s *DuckService) Search(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
 	if opts.Limit == 0 {
 		opts.Limit = 10
@@ -36,6 +60,31 @@ func (s *DuckService) Search(ctx context.Context, opts SearchOptions) ([]Result,
 	if opts.Limit > 100 {
 		opts.Limit = 100
 	}
+
+	var lastErr error
+	for attempt := 0; attempt <= searchRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, 0, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+			}
+		}
+		results, total, err := s.searchOnce(ctx, opts)
+		if err == nil {
+			return results, total, nil
+		}
+		lastErr = err
+		if !retryableDDG(err) {
+			return nil, 0, err
+		}
+	}
+	return nil, 0, lastErr
+}
+
+// searchOnce performs a single DuckDuckGo HTML query, honoring the rate
+// limiter so upstream never sees a burst.
+func (s *DuckService) searchOnce(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
 	if err := s.limiter.Wait(ctx); err != nil {
 		return nil, 0, fmt.Errorf("rate limit wait: %w", err)
 	}

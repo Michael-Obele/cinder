@@ -1,5 +1,11 @@
 version: '3.8'
 
+# Cinder runs as a MONOLITH: the `api` service embeds the Asynq worker
+# (DISABLE_WORKER defaults to false), so there is deliberately NO separate
+# worker service here. Running a standalone worker alongside the monolith
+# would double queue consumption, spawn a second Chrome instance, and let a
+# task be processed by a container different from the one serving its status
+# — the recipe for the "occasional 404" on /v1/crawl/:id.
 services:
   redis:
     image: redis:7-alpine
@@ -7,6 +13,12 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   api:
     build: .
@@ -15,18 +27,34 @@ services:
     environment:
       - SERVER_PORT=8080
       - REDIS_URL=redis://redis:6379
+      - SERVER_MODE=release
+      - SEARXNG_ENDPOINT=http://searxng:8080
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     command: ["/app/cinder-api"]
+    restart: unless-stopped
+    healthcheck:
+      # /health is served unauthenticated and returns 200 only once the
+      # router is up — a real readiness signal, unlike a bare TCP probe.
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  worker:
-    build: .
-    environment:
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
-      - api # Wait for API to potentially init DB (though unrelated here, good practice)
-    command: ["/app/cinder-worker"]
+  # Self-hosted meta-search backend for /v1/search. Aggregates many engines
+  # (Google, Bing, DuckDuckGo, Brave, Mojeek, Wikipedia, ...), so Cinder's
+  # search no longer depends on scraping one engine. Free and containerized.
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8889:8080"
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - searxng_data:/var/cache/searxng
+    restart: unless-stopped
 
 volumes:
   redis_data:
+  searxng_data:

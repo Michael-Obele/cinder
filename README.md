@@ -336,7 +336,8 @@ Exceeding the rate limit returns `429` with a `retry_after` hint. Redis-backed l
 | `SERVER_MODE`          | `debug` | `debug` / `release` / `test`                                |
 | `LOG_LEVEL`            | `info`  | `debug` / `info` / `warn` / `error`                         |
 | `REDIS_URL`            | (none)  | Redis URL — **required** for `/crawl`, `/batch`, `/monitor` |
-| `BRAVE_SEARCH_API_KEY` | (none)  | Enables `/v1/search`                                        |
+| `BRAVE_SEARCH_API_KEY` | (none)  | Enables `/v1/search` (last-resort backend)                  |
+| `SEARXNG_ENDPOINT`     | (none)  | Self-hosted SearXNG base URL (e.g. `http://localhost:8889`) — primary `/v1/search` backend, free, aggregates many engines |
 | `DISABLE_WORKER`       | `false` | Set `true` to run API without the embedded worker           |
 | `CHROME_RECYCLE_AFTER` | `100`   | Restart Chrome allocator after N scrapes (bounds memory)    |
 | `CRAWL_CONCURRENCY`    | `4`     | Parallel crawl workers (1–10)                               |

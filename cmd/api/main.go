@@ -136,8 +136,11 @@ func run() error {
 	// Initialize Handlers
 	scrapeHandler := handlers.NewScrapeHandler(scraperService)
 
-	// Search: DuckDuckGo (free) with Brave fallback if key is set
-	searchSvc := search.NewHybridService(cfg.Brave.APIKey)
+	// Search: self-hosted SearXNG (when configured) → DuckDuckGo (free) →
+	// Brave (when key set). Results are cached in Redis (when available) so
+	// repeat queries don't hammer the upstream engines.
+	searchSvc := search.NewHybridService(cfg.Brave.APIKey, cfg.Search.SearXNGEndpoint)
+	searchSvc = search.NewCachedService(searchSvc, redisClient)
 	searchHandler := handlers.NewSearchHandler(searchSvc)
 
 	// Try to initialize crawl handler (requires Redis)

@@ -13,10 +13,20 @@ type Config struct {
 	App    AppConfig    `mapstructure:"app"`
 	Redis  RedisConfig  `mapstructure:"redis"`
 	Brave  BraveConfig  `mapstructure:"brave"`
+	Search SearchConfig `mapstructure:"search"`
 }
 
 type BraveConfig struct {
 	APIKey string `mapstructure:"api_key"`
+}
+
+// SearchConfig holds optional search backend configuration.
+type SearchConfig struct {
+	// SearXNGEndpoint, when set, points at a self-hosted SearXNG instance
+	// (e.g. "http://localhost:8888") used as the primary search backend.
+	// SearXNG aggregates many engines, so it is more stable than scraping a
+	// single engine and costs nothing beyond one container.
+	SearXNGEndpoint string `mapstructure:"searxng_endpoint"`
 }
 
 type ServerConfig struct {
@@ -77,9 +87,11 @@ func Load() (*Config, error) {
 	v.SetDefault("redis.rest_url", "")
 	v.SetDefault("redis.rest_token", "")
 	v.SetDefault("brave.api_key", "")
+	v.SetDefault("search.searxng_endpoint", "")
 
 	// Custom bindings
 	v.BindEnv("brave.api_key", "BRAVE_SEARCH_API_KEY")
+	v.BindEnv("search.searxng_endpoint", "SEARXNG_ENDPOINT")
 	v.BindEnv("redis.rest_url", "UPSTASH_REDIS_REST_URL")
 	v.BindEnv("redis.rest_token", "UPSTASH_REDIS_REST_TOKEN")
 
