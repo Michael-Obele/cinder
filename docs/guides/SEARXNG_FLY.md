@@ -25,9 +25,21 @@ JSON-enabled `deploy/searxng/settings.yml` into the official image.
 
 > [!TIP]
 > There is an idempotent helper for all of this — `scripts/fly-searxng.sh`
-> (`deploy` / `status` / `destroy`). It builds, pushes, creates or updates the
-> machine, sets the secret, and verifies from inside the Cinder machine. The
-> manual steps below are what it runs.
+> (`deploy` / `status` / `start` / `stop` / `destroy`). It builds, pushes,
+> creates or updates the machine, sets the secret, and can start/stop BOTH
+> machines together. The manual steps below are what it runs.
+
+### Auto-stop behavior
+
+Both machines have services with `auto_stop='stop'` and `auto_start=true`.
+When no public traffic hits either machine, the Fly proxy stops them — cost
+drops to $0. When someone hits `https://cinder9630.fly.dev/`, Cinder
+auto-starts. The first search after idle falls back to Brave (the
+`SEARXNG_ENDPOINT` secret is set but the sidecar is still stopped). Hit the
+SearXNG public URL or run `scripts/fly-searxng.sh start` to wake it.
+
+To manually wind down everything: `scripts/fly-searxng.sh stop` — both
+machines stop, cost goes to $0 until next request.
 
 ### 1. Build and push the sidecar image
 
@@ -51,8 +63,11 @@ docker push registry.fly.io/cinder9630:searxng
 fly machine run registry.fly.io/cinder9630:searxng \
   --app cinder9630 \
   --name searxng \
-  --memory 512 \
-  --region ams
+  --memory 256 \
+  --region lhr \
+  --port 8080/tcp \
+  --autostop stop \
+  --autostart
 ```
 
 Then set its process group. This flyctl version has no `--process-group` flag
@@ -67,17 +82,21 @@ fly machine update searxng --app cinder9630 \
 
 Notes:
 
-- **No public port** — SearXNG is reached only over the private network, so
-  it is never exposed publicly (no auth on the instance).
+- **Public port with auto_stop** — SearXNG has a public service on port 8080
+  so the Fly proxy can auto-stop it when no traffic hits. The URL is random
+  and not easily discoverable. Internal traffic from Cinder (via
+  `searxng.internal`) bypasses the proxy, so it won't keep SearXNG alive —
+  which is what we want (both machines stop when idle).
 - **Process group `searxng`** keeps it out of the app's default group.
   Critically, the machine must **not** carry `fly_platform_version: v2`
   metadata — that would mark it Fly-Launch-managed and `fly deploy` would
   destroy it (its group is not in `fly.toml`). Without that key it is a
   *detached* machine that `fly deploy` leaves alone.
-- `--memory 512` gives SearXNG headroom over its ~200–300 MB baseline.
-- `auto_stop`/`auto_start` are **service-level** settings (they only apply to
-  machines with public services). The sidecar has no public port, so it just
-  stays running — which is what a search backend wants.
+- `--memory 256` is the minimum valid increment on Fly (125MB is not allowed).
+  SearXNG uses ~150 MB baseline; 256 MB gives it headroom.
+- Both machines auto-stop when idle (cost drops to $0) and auto-start on first
+  request. First search after idle falls back to Brave. Use
+  `scripts/fly-searxng.sh start` / `stop` to manually control both together.
 
 ### 3. Point Cinder at it
 
