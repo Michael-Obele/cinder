@@ -36,6 +36,12 @@ cinder
 *.swp
 *~
 
+# Backup / original files (e.g. CLAUDE.original.md left by editing tools)
+*.orig
+*.original
+*.bak
+*.original.md
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -45,6 +51,12 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+# Certificates and keys
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Logs and temporary files
 *.log
