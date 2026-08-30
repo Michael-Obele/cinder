@@ -22,6 +22,12 @@ kill_timeout = '25s'
   # defaults to debug — and debug shells out to `go run swag@latest init` on
   # every startup and serves Swagger UI publicly. Neither belongs in a deploy.
   SERVER_MODE = 'release'
+  # Search backend: /v1/search uses self-hosted SearXNG when SEARXNG_ENDPOINT
+  # is set, falling back to Brave (BRAVE_SEARCH_API_KEY secret) otherwise.
+  # SearXNG aggregates Google/Bing/DDG/Brave/Mojeek/Wikipedia and is free.
+  # Deploy it as its own Fly app (or point at any SearXNG instance) and
+  # uncomment this; leave unset to rely on the Brave fallback only.
+  # SEARXNG_ENDPOINT = 'https://searxng.fly.dev'
 
 [http_service]
   internal_port = 8080
