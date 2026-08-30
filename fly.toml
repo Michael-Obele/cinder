@@ -4,7 +4,7 @@
 #
 
 app = 'cinder9630'
-primary_region = 'ams'
+primary_region = 'lhr'
 
 # Fly sends SIGTERM then SIGKILLs after this. It must exceed SHUTDOWN_TIMEOUT
 # (20s) or the drain gets cut off mid-flight; the default of 5s is far too
@@ -12,41 +12,44 @@ primary_region = 'ams'
 kill_timeout = '25s'
 
 [build]
-  dockerfile = 'Dockerfile'
+dockerfile = 'Dockerfile'
 
 [env]
-  GIN_MODE = 'release'
-  LOG_LEVEL = 'info'
-  SERVER_PORT = '8080'
-  # GIN_MODE only configures Gin. Cinder reads its own SERVER_MODE, which
-  # defaults to debug — and debug shells out to `go run swag@latest init` on
-  # every startup and serves Swagger UI publicly. Neither belongs in a deploy.
-  SERVER_MODE = 'release'
-  # Search backend: /v1/search uses self-hosted SearXNG when SEARXNG_ENDPOINT
-  # is set, falling back to Brave (BRAVE_SEARCH_API_KEY secret) otherwise.
-  # SearXNG aggregates Google/Bing/DDG/Brave/Mojeek/Wikipedia and is free.
-  # Deploy it as its own Fly app (or point at any SearXNG instance) and
-  # uncomment this; leave unset to rely on the Brave fallback only.
-  # SEARXNG_ENDPOINT = 'https://searxng.fly.dev'
+GIN_MODE = 'release'
+LOG_LEVEL = 'info'
+SERVER_PORT = '8080'
+# GIN_MODE only configures Gin. Cinder reads its own SERVER_MODE, which
+# defaults to debug — and debug shells out to `go run swag@latest init` on
+# every startup and serves Swagger UI publicly. Neither belongs in a deploy.
+SERVER_MODE = 'release'
+# Search backend: /v1/search uses self-hosted SearXNG when SEARXNG_ENDPOINT
+# is set, falling back to Brave (BRAVE_SEARCH_API_KEY secret) otherwise.
+# SearXNG aggregates Google/Bing/DDG/Brave/Mojeek/Wikipedia and is free.
+#
+# Deployed as a SIDE CAR machine in this same app (Option A) — see
+# docs/guides/SEARXNG_FLY.md and scripts/fly-searxng.sh. It is reached over
+# the private network only (no public port), so the endpoint is set as a
+# secret (fly secrets set SEARXNG_ENDPOINT=http://searxng.internal:8080)
+# rather than committed here. Uncomment only if you prefer config-in-repo:
+# SEARXNG_ENDPOINT = 'http://searxng.internal:8080'
 
 [http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
+internal_port = 8080
+force_https = true
+auto_stop_machines = 'stop'
+auto_start_machines = true
+min_machines_running = 0
+processes = ['app']
 
-[http_service.checks]
-  [http_service.checks.health]
-    interval = '30s'
-    timeout = '5s'
-    grace_period = '45s'
-    method = 'GET'
-    path = '/health'
+[[http_service.checks]]
+interval = '30s'
+timeout = '5s'
+grace_period = '45s'
+method = 'GET'
+path = '/health'
 
 [[vm]]
-  cpu_kind = 'shared'
-  cpus = 1
-  memory_mb = 1024
-  swap_size_mb = 1024
+cpu_kind = 'shared'
+cpus = 1
+memory_mb = 1024
+swap_size_mb = 1024
