@@ -24,14 +24,14 @@ highlights and summaries that make results immediately usable by an LLM.
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cinder_scrape`                        | Smart/static/dynamic scrape → clean LLM-ready markdown. Screenshots, image extraction (url/blob + resize/re-encode), extractive summary, deterministic CSS-selector schema extraction, PII redaction, page actions (click/wait/scroll), ad blocking. |
 | `cinder_crawl` / `cinder_crawl_status` | Async BFS crawl: depth/limit, include/exclude globs, webhooks, per-domain politeness, retry w/ backoff.                                                                                                                                              |
-| `cinder_search`                        | DuckDuckGo (free) + Brave fallback. Pagination, domain include/exclude, requiredText, maxAge, fast mode.                                                                                                                                             |
+| `cinder_search`                        | Self-hosted SearXNG (aggregates Google/Bing/DDG/Brave/Mojeek/Wikipedia) + optional Brave fallback. Pagination, domain include/exclude, requiredText, maxAge, fast mode.                                                                              |
 | `cinder_monitor`                       | Change-tracking: hash page markdown, fire signed webhook on change, on an interval.                                                                                                                                                                  |
 
 ## Parity table
 
 | Capability                             | Exa                               | Cinder                                     | Winner     |
 | -------------------------------------- | --------------------------------- | ------------------------------------------ | ---------- |
-| Semantic (vector) search               | ✅                                | ❌ (keyword via DDG/Brave)                 | **Exa**    |
+| Semantic (vector) search               | ✅                                | ❌ (keyword via SearXNG/Brave)             | **Exa**    |
 | Search highlights / excerpts           | ✅                                | ❌                                         | **Exa**    |
 | Search summaries                       | ✅ (advanced)                     | ✅ (extractive, LLM-free)                  | Tie        |
 | Clean markdown fetch                   | ✅                                | ✅ (readability + html-to-markdown)        | Tie        |
@@ -59,16 +59,19 @@ LLM-ready content", Cinder is strictly more capable.
 
 The gap is on the **search side**: Exa's semantic search, highlights, and
 category/date filters are its moat. Cinder's search is keyword-based
-(DuckDuckGo/Brave) and, until this sprint, fragile under load.
+(SearXNG/Brave) — SearXNG aggregates many engines so it is stable and free,
+but it is still keyword matching, not vector similarity.
 
 ## What this sprint shipped to close the gap
 
-1. **Search result caching** (`internal/search/cache.go`) — repeat queries
-   served from Redis in ~2ms instead of re-hitting DuckDuckGo (6s+). Under a
-   45s/20-worker load test, `/v1/search` went from **18% → 100% success**.
-2. **DuckDuckGo retry with backoff** (`internal/search/duckduckgo.go`) —
-   transient 429/5xx/network failures retried up to 2× instead of failing
-   the request.
+1. **Self-hosted SearXNG backend** (`internal/search/searxng.go`) — replaces
+   the fragile direct DuckDuckGo scraper. SearXNG aggregates Google, Bing,
+   DDG, Brave, Mojeek and Wikipedia, so search no longer depends on scraping
+   a single rate-limited engine. The old DuckDuckGo scraper was removed.
+2. **Search result caching** (`internal/search/cache.go`) — repeat queries
+   served from Redis in ~2ms instead of re-hitting the upstream engine. Under
+   a 45s/20-worker load test, `/v1/search` went from **18% → 100% success**
+   and stays at 100% with SearXNG.
 3. **Load harness** (`scripts/load-harness.go`) — per-endpoint status
    distributions, latency percentiles (p50/p95/p99), error classification
    (dns/timeout/conn-refused/conn-reset), a false-404 detector that hammers
@@ -77,11 +80,11 @@ category/date filters are its moat. Cinder's search is keyword-based
 
 ## Roadmap to full parity (search side)
 
-- **Highlights**: return query-term-highlighted snippets per result (DDG
+- **Highlights**: return query-term-highlighted snippets per result (SearXNG
   already returns snippets; extract the matching span around query terms).
 - **Category filters**: map Exa's `category:` (company/publication/news/
-  people) onto DDG's HTML params (`kl` region, `iar` verticals) and Brave's
-  `search_type` / domain heuristics.
+  people) onto SearXNG's `categories` param (`general`, `news`, `it`, ...)
+  and Brave's `search_type` / domain heuristics.
 - **Semantic search**: the only true gap. Options, in increasing effort:
   1. Client-side re-ranking: embed the query + result snippets with a local
      model (e.g. `bge-small` via ONNX) and re-rank — no index needed.

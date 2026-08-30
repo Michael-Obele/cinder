@@ -57,7 +57,7 @@ Returns clean markdown in ~200ms (static) to ~1–3s (dynamic):
 
 ```bash
 fly launch          # uses the included fly.toml
-fly secrets set REDIS_URL=rediss://... BRAVE_SEARCH_API_KEY=...
+fly secrets set REDIS_URL=rediss://... SEARXNG_ENDPOINT=https://searxng.example.com
 fly deploy
 ```
 
@@ -230,13 +230,13 @@ curl http://localhost:8080/v1/crawl/asynq:task:uuid-here
 
 ---
 
-### 4. Search (Powered by Brave)
+### 4. Search (Powered by self-hosted SearXNG)
 
 **Search the web and return results.**
 
 `POST /v1/search`
 
-**Requires:** `BRAVE_SEARCH_API_KEY` environment variable
+**Requires:** `SEARXNG_ENDPOINT` (recommended — free, self-hosted, aggregates many engines) or `BRAVE_SEARCH_API_KEY` (optional fallback). With neither, `/v1/search` returns a clear configuration error.
 
 **Request:**
 
