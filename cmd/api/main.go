@@ -182,9 +182,24 @@ func run() error {
 	router := api.NewRouter(cfg, logger.Log, scrapeHandler, crawlHandler, searchHandler, redisClient)
 
 	// 5. Run Server
+	//
+	// Timeouts are deliberate:
+	//   - ReadHeaderTimeout guards against slowloris-style clients that
+	//     open a connection and trickle headers, which would otherwise pin
+	//     a goroutine and an FD indefinitely under load.
+	//   - ReadTimeout bounds how long a request body may take to arrive.
+	//   - IdleTimeout reaps keep-alive connections that are not being used,
+	//     so a burst of clients doesn't leave a pile of idle FDs behind.
+	//   - WriteTimeout stays 0 (disabled): a scrape legitimately takes tens
+	//     of seconds, and Go's WriteTimeout covers the whole handler span,
+	//     so a value here would cut real work. The scraper enforces its own
+	//     per-engine deadlines instead.
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", cfg.Server.Port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%s", cfg.Server.Port),
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	serverErr := make(chan error, 1)

@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -11,20 +11,30 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/cinder-api ./cmd/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/cinder-worker ./cmd/worker
 
 # Final Stage
-FROM alpine:latest
+FROM alpine:3.20
 
-# Install Chromium, fonts, runtime dependencies, and tini for zombie reaping
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    tzdata \
-    ttf-freefont \
-    font-noto-emoji \
-    wqy-zenhei \
-    tini
+# Install Chromium, fonts, runtime dependencies, and tini for zombie reaping.
+# apk is retried: the alpine CDN (dl-cdn.alpinelinux.org) intermittently
+# SERVFAILs under load, and a single failed fetch would otherwise fail the
+# whole image build. Each attempt that succeeds exits 0; only after all
+# attempts fail does the build fail.
+RUN apk update && \
+    for i in 1 2 3 4 5; do \
+        apk add --no-cache \
+            chromium \
+            nss \
+            freetype \
+            harfbuzz \
+            ca-certificates \
+            tzdata \
+            ttf-freefont \
+            font-noto-emoji \
+            wqy-zenhei \
+            tini && exit 0; \
+        echo "apk add failed (attempt $i); retrying in 5s..."; \
+        sleep 5; \
+    done; \
+    exit 1
 
 # Set env for Chromedp to find chromium
 ENV CHROME_BIN=/usr/bin/chromium-browser

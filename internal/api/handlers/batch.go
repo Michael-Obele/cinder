@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -164,7 +165,20 @@ func (h *BatchHandler) GetBatchStatus(c *gin.Context) {
 	for i := range tasks {
 		info, err := h.inspector.GetTaskInfo("default", tasks[i].ID)
 		if err != nil {
-			continue
+			// A task that no longer exists (or a queue that has no keys
+			// yet) is done — count it as completed rather than silently
+			// dropping it. A transient backend error, though, means the
+			// whole status is unreliable right now — surface that as 503
+			// instead of under-reporting.
+			if errors.Is(err, asynq.ErrTaskNotFound) || errors.Is(err, asynq.ErrQueueNotFound) {
+				completed++
+				continue
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":  "batch status temporarily unavailable",
+				"detail": err.Error(),
+			})
+			return
 		}
 		switch info.State {
 		case asynq.TaskStateCompleted:

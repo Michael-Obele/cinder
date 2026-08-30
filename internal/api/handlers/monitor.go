@@ -130,7 +130,17 @@ func (h *MonitorHandler) GetMonitor(c *gin.Context) {
 	id := c.Param("id")
 	raw, err := h.redis.Get(c.Request.Context(), monitorPrefix+id).Result()
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "monitor not found"})
+		// Only a genuine miss is a 404. A Redis outage or pool exhaustion
+		// must not masquerade as "monitor not found" — that is a false
+		// negative that makes clients delete/recreate monitors that exist.
+		if err == redis.Nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "monitor not found"})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "monitor status temporarily unavailable",
+			"detail": err.Error(),
+		})
 		return
 	}
 	var cfg worker.MonitorConfig

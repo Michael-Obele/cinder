@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -155,16 +156,30 @@ func (h *CrawlHandler) GetCrawlStatus(c *gin.Context) {
 	// Search across all configured queues
 	queues := []string{"default", "critical", "low"}
 	var info *asynq.TaskInfo
-	var err error
 
 	for _, q := range queues {
-		info, err = h.inspector.GetTaskInfo(q, id)
+		ti, err := h.inspector.GetTaskInfo(q, id)
 		if err == nil {
+			info = ti
 			break
+		}
+		// A task genuinely absent from a queue is not an error worth
+		// surfacing — try the next one. That includes a queue that has no
+		// Redis keys yet (ErrQueueNotFound): a task cannot be in a queue
+		// that does not exist. Anything else (Redis down, pool exhausted,
+		// timeout) is transient: the task may well exist, and reporting 404
+		// here is a false negative that makes clients think a job vanished.
+		// Fail with 503 instead so the client retries.
+		if !errors.Is(err, asynq.ErrTaskNotFound) && !errors.Is(err, asynq.ErrQueueNotFound) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":  "task status temporarily unavailable",
+				"detail": err.Error(),
+			})
+			return
 		}
 	}
 
-	if err != nil {
+	if info == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}

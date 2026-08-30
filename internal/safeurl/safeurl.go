@@ -20,6 +20,7 @@ package safeurl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -33,6 +34,54 @@ import (
 // AllowPrivateEnv opts out of private-address blocking, for operators who
 // legitimately scrape an internal wiki or a local dev server.
 const AllowPrivateEnv = "SSRF_ALLOW_PRIVATE"
+
+// dnsRetries is how many times a transient DNS failure is retried before
+// giving up. Docker's embedded resolver (127.0.0.11) intermittently returns
+// SERVFAIL / "server misbehaving" under burst load — a quick retry usually
+// succeeds and turns a whole scrape failure into a blip.
+const dnsRetries = 3
+
+// retryableDNS reports whether a lookup/dial error is worth retrying.
+// NXDOMAIN ("no such host") is definitive — retrying cannot help. Everything
+// else from the resolver (timeouts, SERVFAIL, "server misbehaving", refused)
+// is transient and may succeed on a retry.
+func retryableDNS(err error) bool {
+	var dnsErr *net.DNSError
+	if !errors.As(err, &dnsErr) {
+		return false
+	}
+	return !dnsErr.IsNotFound
+}
+
+// dnsBackoff returns the wait before retry attempt n (0-based).
+func dnsBackoff(attempt int) time.Duration {
+	return time.Duration(attempt+1) * 250 * time.Millisecond
+}
+
+// resolveWithRetry resolves host, retrying transient DNS failures with a
+// short backoff. It returns the first successful answer set, or the last
+// error once retries are exhausted.
+func resolveWithRetry(ctx context.Context, host string) ([]netip.Addr, error) {
+	var lastErr error
+	for attempt := 0; attempt <= dnsRetries; attempt++ {
+		addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		if err == nil {
+			return addrs, nil
+		}
+		lastErr = err
+		if !retryableDNS(err) {
+			return nil, err
+		}
+		if attempt < dnsRetries {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(dnsBackoff(attempt)):
+			}
+		}
+	}
+	return nil, lastErr
+}
 
 // ErrBlocked is returned when a destination resolves to a blocked address.
 type ErrBlocked struct {
@@ -135,7 +184,7 @@ func Check(ctx context.Context, rawURL string) error {
 		return nil
 	}
 
-	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	addrs, err := resolveWithRetry(ctx, host)
 	if err != nil {
 		return fmt.Errorf("could not resolve %s: %w", host, err)
 	}
@@ -188,10 +237,42 @@ func Dialer() *net.Dialer {
 	}
 }
 
-// Transport returns an http.Transport that refuses non-public destinations.
+// retryDialContext wraps a dial function so that transient DNS failures are
+// retried with a short backoff before giving up.
+//
+// The retry matters in containerized deployments: Docker's embedded resolver
+// (127.0.0.11) intermittently answers SERVFAIL / "server misbehaving" under
+// burst load. Without a retry, a single bad answer fails the whole scrape.
+// NXDOMAIN is not retried — the host genuinely does not exist.
+func retryDialContext(base func(ctx context.Context, network, addr string) (net.Conn, error)) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		var lastErr error
+		for attempt := 0; attempt <= dnsRetries; attempt++ {
+			conn, err := base(ctx, network, addr)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+			if !retryableDNS(err) {
+				return nil, err
+			}
+			if attempt < dnsRetries {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(dnsBackoff(attempt)):
+				}
+			}
+		}
+		return nil, lastErr
+	}
+}
+
+// Transport returns an http.Transport that refuses non-public destinations
+// and retries transient DNS failures.
 func Transport() *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.DialContext = Dialer().DialContext
+	t.DialContext = retryDialContext(Dialer().DialContext)
 	return t
 }
 

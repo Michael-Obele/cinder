@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"testing"
+	"time"
 )
 
 func TestBlockedIP(t *testing.T) {
@@ -118,6 +119,118 @@ func TestCheckLiteralIP(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryableDNS(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		retry bool
+	}{
+		{
+			name:  "server misbehaving (Docker SERVFAIL) is retryable",
+			err:   &net.DNSError{Err: "server misbehaving", Name: "example.com"},
+			retry: true,
+		},
+		{
+			name:  "timeout is retryable",
+			err:   &net.DNSError{Err: "i/o timeout", Name: "example.com", IsTimeout: true},
+			retry: true,
+		},
+		{
+			name:  "NXDOMAIN is definitive, not retryable",
+			err:   &net.DNSError{Err: "no such host", Name: "nope.invalid", IsNotFound: true},
+			retry: false,
+		},
+		{
+			name:  "non-DNS errors are not retried",
+			err:   errors.New("connection refused"),
+			retry: false,
+		},
+		{
+			name:  "nil is not retried",
+			err:   nil,
+			retry: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := retryableDNS(tt.err); got != tt.retry {
+				t.Errorf("retryableDNS(%v) = %v, want %v", tt.err, got, tt.retry)
+			}
+		})
+	}
+}
+
+func TestRetryDialContextRecoversFromTransientDNS(t *testing.T) {
+	// Simulate Docker's embedded resolver flaking: the first two dials fail
+	// with "server misbehaving", the third succeeds. The wrapper must retry
+	// and return the successful connection.
+	attempts := 0
+	base := func(_ context.Context, _, _ string) (net.Conn, error) {
+		attempts++
+		if attempts <= 2 {
+			return nil, &net.DNSError{Err: "server misbehaving", Name: "example.com"}
+		}
+		return &fakeConn{}, nil
+	}
+
+	dial := retryDialContext(base)
+	conn, err := dial(context.Background(), "tcp", "example.com:443")
+	if err != nil {
+		t.Fatalf("retryDialContext gave up after transient DNS errors: %v", err)
+	}
+	defer conn.Close()
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts (2 failures + success), got %d", attempts)
+	}
+}
+
+func TestRetryDialContextGivesUpOnPersistentDNS(t *testing.T) {
+	attempts := 0
+	base := func(_ context.Context, _, _ string) (net.Conn, error) {
+		attempts++
+		return nil, &net.DNSError{Err: "server misbehaving", Name: "example.com"}
+	}
+
+	dial := retryDialContext(base)
+	_, err := dial(context.Background(), "tcp", "example.com:443")
+	if err == nil {
+		t.Fatal("expected an error after retries were exhausted")
+	}
+	if attempts != dnsRetries+1 {
+		t.Errorf("expected %d attempts, got %d", dnsRetries+1, attempts)
+	}
+}
+
+func TestRetryDialContextDoesNotRetryNXDOMAIN(t *testing.T) {
+	attempts := 0
+	base := func(_ context.Context, _, _ string) (net.Conn, error) {
+		attempts++
+		return nil, &net.DNSError{Err: "no such host", Name: "nope.invalid", IsNotFound: true}
+	}
+
+	dial := retryDialContext(base)
+	_, err := dial(context.Background(), "tcp", "nope.invalid:443")
+	if err == nil {
+		t.Fatal("expected NXDOMAIN to fail")
+	}
+	if attempts != 1 {
+		t.Errorf("NXDOMAIN must not be retried; got %d attempts", attempts)
+	}
+}
+
+// fakeConn is a minimal net.Conn for tests that only need a non-nil success.
+type fakeConn struct{}
+
+func (*fakeConn) Read([]byte) (int, error)         { return 0, nil }
+func (*fakeConn) Write([]byte) (int, error)        { return 0, nil }
+func (*fakeConn) Close() error                     { return nil }
+func (*fakeConn) LocalAddr() net.Addr              { return nil }
+func (*fakeConn) RemoteAddr() net.Addr             { return nil }
+func (*fakeConn) SetDeadline(time.Time) error      { return nil }
+func (*fakeConn) SetReadDeadline(time.Time) error  { return nil }
+func (*fakeConn) SetWriteDeadline(time.Time) error { return nil }
 
 func TestCheckLocalhostName(t *testing.T) {
 	// "localhost" resolves via the resolver path rather than the literal
