@@ -535,7 +535,7 @@ const docTemplate = `{
         },
         "/search": {
             "get": {
-                "description": "Searches the web using the configured search provider (Brave Search) and returns a list of matching results.",
+                "description": "Searches the web using DuckDuckGo HTML (free, no key) with Brave Search as fallback when BRAVE_SEARCH_API_KEY is set.",
                 "consumes": [
                     "application/json"
                 ],
@@ -604,7 +604,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Searches the web using the configured search provider (Brave Search) and returns a list of matching results.",
+                "description": "Searches the web using DuckDuckGo HTML (free, no key) with Brave Search as fallback when BRAVE_SEARCH_API_KEY is set.",
                 "consumes": [
                     "application/json"
                 ],
