@@ -14,7 +14,7 @@
 # Auto-stop behavior:
 #   Both machines have services with auto_stop='stop' and auto_start=true.
 #   When no public traffic hits either machine, the Fly proxy stops them.
-#   When someone hits https://cinder9630.fly.dev/, Cinder auto-starts.
+#   When someone hits the public URL, Cinder auto-starts.
 #   First search after idle falls back to Brave (SEARXNG_ENDPOINT secret is
 #   set but the sidecar is stopped). Hit the SearXNG public URL or run
 #   `start` to wake it.

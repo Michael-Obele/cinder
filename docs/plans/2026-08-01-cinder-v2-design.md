@@ -13,7 +13,7 @@ Make Cinder faster, crawl better, fetch images better, and add competitive new f
 ## 2. Evidence Base
 
 - **Code audit** of `internal/scraper`, `internal/image`, `internal/worker`, `internal/domain`, `internal/api`.
-- **Live dogfooding** against `https://cinder9630.fly.dev` (image extraction returned 48px avatars instead of hero images; cache verified working; smart mode ~2s on react.dev).
+- **Live dogfooding** against the Fly deployment (image extraction returned 48px avatars instead of hero images; cache verified working; smart mode ~2s on react.dev).
 - **Competitive research** (Firecrawl v2.11 changelog, anti-bot state-of-the-art, content extraction techniques).
 
 ### Key findings (each maps to work below)

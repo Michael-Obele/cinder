@@ -11,7 +11,7 @@ builds `cinder-api` and `cinder-worker`), but there are two ways to run it
 on Fly with one app to manage:
 
 - **Option A — same app, separate machine** (sidecar): add a second Fly
-  machine running SearXNG _inside_ the `cinder9630` app. One app, one
+  machine running SearXNG _inside_ the same app as Cinder. One app, one
   dashboard entry, private-network access for free.
 - **Option B — separate app**: SearXNG as its own Fly app. Cleanest
   isolation, but a second app to manage.
@@ -33,10 +33,10 @@ JSON-enabled `deploy/searxng/settings.yml` into the official image.
 
 Both machines have services with `auto_stop='stop'` and `auto_start=true`.
 When no public traffic hits either machine, the Fly proxy stops them — cost
-drops to $0. When someone hits `https://cinder9630.fly.dev/`, Cinder
-auto-starts. The first search after idle falls back to Brave (the
-`SEARXNG_ENDPOINT` secret is set but the sidecar is still stopped). Hit the
-SearXNG public URL or run `scripts/fly-searxng.sh start` to wake it.
+drops to $0. When someone hits the public URL, Cinder auto-starts. The
+first search after idle falls back to Brave (the `SEARXNG_ENDPOINT` secret
+is set but the sidecar is still stopped). Hit the SearXNG public URL or
+run `scripts/fly-searxng.sh start` to wake it.
 
 To manually wind down everything: `scripts/fly-searxng.sh stop` — both
 machines stop, cost goes to $0 until next request.
@@ -52,16 +52,16 @@ machines stop, cost goes to $0 until next request.
 
 ```bash
 cd deploy
-docker build -f searxng-fly/Dockerfile -t registry.fly.io/cinder9630:searxng .
+docker build -f searxng-fly/Dockerfile -t registry.fly.io/<your-app>:searxng .
 # fly auth docker (use the helper's scratch DOCKER_CONFIG if pass is broken)
-docker push registry.fly.io/cinder9630:searxng
+docker push registry.fly.io/<your-app>:searxng
 ```
 
 ### 2. Create the SearXNG machine in the SAME app
 
 ```bash
-fly machine run registry.fly.io/cinder9630:searxng \
-  --app cinder9630 \
+fly machine run registry.fly.io/<your-app>:searxng \
+  --app <your-app> \
   --name searxng \
   --memory 256 \
   --region lhr \
@@ -76,7 +76,7 @@ on `machine run`/`update` — the group lives in
 script does this):
 
 ```bash
-fly machine update searxng --app cinder9630 \
+fly machine update searxng --app <your-app> \
   --machine-config <(echo '{"config":{"metadata":{"fly_process_group":"searxng"}}}') -y
 ```
 
@@ -101,7 +101,7 @@ Notes:
 ### 3. Point Cinder at it
 
 ```bash
-fly secrets set --app cinder9630 SEARXNG_ENDPOINT=http://searxng.internal:8080
+fly secrets set --app <your-app> SEARXNG_ENDPOINT=http://searxng.internal:8080
 ```
 
 (`searxng.internal` is the machine's private-network name; `8080` is the
@@ -111,11 +111,12 @@ port SearXNG listens on in the container.)
 
 ```bash
 # From inside the Cinder machine, SearXNG must answer on the private network:
-fly ssh console --app cinder9630 -C "wget -qO- http://searxng.internal:8080/search?q=golang&format=json | head -c 120"
+fly ssh console --app <your-app> -C "wget -qO- http://searxng.internal:8080/search?q=golang&format=json | head -c 120"
 
-# Through Cinder:
-curl -s -X POST https://cinder9630.fly.dev/v1/search \
-  -H 'Content-Type: application/json' -d '{"query":"golang concurrency","limit":3}'
+# Through Cinder (replace <your-app>.fly.dev with your actual URL):
+curl -s -X POST https://<your-app>.fly.dev/v1/search \
+  -H 'Content-Type: application/json' -H 'X-API-Key: <your-api-key>' \
+  -d '{"query":"golang concurrency","limit":3}'
 ```
 
 ---
@@ -174,7 +175,7 @@ fly deploy
 Give the machine a moment to boot, then check the JSON API responds:
 
 ```bash
-curl -s "https://searxng.fly.dev/search?q=golang&format=json" | head -c 200
+curl -s "https://<your-searxng-app>.fly.dev/search?q=golang&format=json" | head -c 200
 ```
 
 ## Step 3 — Point Cinder at it
@@ -189,7 +190,7 @@ cd ~/Documents/GitHub/cinder
 fly secrets set SEARXNG_ENDPOINT=http://searxng.internal
 
 # ...or, if you want it reachable publicly:
-# fly secrets set SEARXNG_ENDPOINT=https://searxng.fly.dev
+# fly secrets set SEARXNG_ENDPOINT=https://<your-searxng-app>.fly.dev
 ```
 
 > [!NOTE]
@@ -201,12 +202,13 @@ fly secrets set SEARXNG_ENDPOINT=http://searxng.internal
 
 ```bash
 # SearXNG direct (JSON API)
-curl -s "https://searxng.fly.dev/search?q=fly.io+deployment&format=json" | \
+curl -s "https://<your-searxng-app>.fly.dev/search?q=fly.io+deployment&format=json" | \
   python3 -c "import json,sys; print(len(json.load(sys.stdin)['results']), 'results')"
 
-# Through Cinder
-curl -s -X POST https://cinder9630.fly.dev/v1/search \
+# Through Cinder (replace <your-app>.fly.dev with your actual URL)
+curl -s -X POST https://<your-app>.fly.dev/v1/search \
   -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <your-api-key>' \
   -d '{"query":"fly.io deployment","limit":3}'
 ```
 
