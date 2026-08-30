@@ -2,40 +2,48 @@ package search
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
 // HybridService tries a chain of search backends in order and returns the
-// first non-empty result set. Backends are ordered cheapest-to-most-robust:
-// a self-hosted SearXNG when configured, then DuckDuckGo (free), then Brave
-// (only when an API key is set). A backend that errors or returns nothing
-// falls through to the next, so a single engine outage never kills search.
+// first non-empty result set. Backends are ordered cheap-to-robust: a
+// self-hosted SearXNG when configured, then Brave (only when an API key is
+// set). A backend that errors or returns nothing falls through to the next,
+// so a single engine outage never kills search.
 type HybridService struct {
 	services []Service
 }
 
-// NewHybridService builds the fallback chain from configuration.
+// NewHybridService builds the search backend chain from configuration.
 //
-//   - braveAPIKey: optional Brave Search API key. When set it is the last
-//     resort (has a free tier: ~2000 queries/month at 1 QPS).
-//   - searxngEndpoint: optional self-hosted SearXNG base URL. When set it
-//     becomes the primary backend (free, aggregates many engines).
+//   - braveAPIKey: optional Brave Search API key. When set it is the
+//     fallback when SearXNG is unavailable or unconfigured (free tier:
+//     ~2000 queries/month at 1 QPS).
+//   - searxngEndpoint: self-hosted SearXNG base URL. When set it is the
+//     primary backend — free, aggregates many engines (Google, Bing,
+//     DuckDuckGo, Brave, Mojeek, Wikipedia, ...), and has no per-query cost.
 //
-// DuckDuckGo is always in the chain as the free middle tier.
+// When neither is configured, a Service is returned that fails with a clear
+// message so a misconfigured deployment fails loudly instead of silently
+// returning empty results.
 func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 	var chain []Service
 	if searxngEndpoint != "" {
 		chain = append(chain, NewSearXNGService(searxngEndpoint))
 	}
-	chain = append(chain, NewDuckService())
 	if braveAPIKey != "" {
 		chain = append(chain, NewBraveService(braveAPIKey))
 	}
 
-	if len(chain) == 1 {
+	switch len(chain) {
+	case 0:
+		return noBackendService{}
+	case 1:
 		return chain[0]
+	default:
+		return &HybridService{services: chain}
 	}
-	return &HybridService{services: chain}
 }
 
 func (h *HybridService) Search(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
@@ -54,4 +62,13 @@ func (h *HybridService) Search(ctx context.Context, opts SearchOptions) ([]Resul
 		return nil, 0, lastErr
 	}
 	return nil, 0, nil
+}
+
+// noBackendService fails every search with a configuration error. It is
+// returned when neither SearXNG nor Brave is configured, so operators see
+// exactly what to set instead of an empty result set.
+type noBackendService struct{}
+
+func (noBackendService) Search(context.Context, SearchOptions) ([]Result, int, error) {
+	return nil, 0, errors.New("search is not configured: set SEARXNG_ENDPOINT (recommended) or BRAVE_SEARCH_API_KEY")
 }

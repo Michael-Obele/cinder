@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 # Cinder runs as a MONOLITH: the `api` service embeds the Asynq worker
 # (DISABLE_WORKER defaults to false), so there is deliberately NO separate

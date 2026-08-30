@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 // SearXNGService implements Service against a self-hosted SearXNG
@@ -17,19 +15,23 @@ import (
 // Bing, DuckDuckGo, Brave, Mojeek, Wikipedia, ...), so a single instance
 // removes the single-point-of-failure of scraping one engine directly and
 // costs nothing beyond one container.
+//
+// There is deliberately NO client-side rate limiter here: SearXNG is
+// self-hosted and handles concurrent searches internally (its per-engine
+// rate limiting lives in its own settings). A client limiter would serialize
+// every query to ~1 req/s and turn concurrent load into a queue — exactly
+// what the load benchmark caught before it was removed.
 type SearXNGService struct {
 	client   *http.Client
-	limiter  *rate.Limiter
 	endpoint string
 }
 
 // NewSearXNGService creates a service pointing at a SearXNG base URL such as
-// "http://localhost:8888". The JSON API must be enabled on the instance
+// "http://localhost:8889". The JSON API must be enabled on the instance
 // (search.formats includes json).
 func NewSearXNGService(endpoint string) *SearXNGService {
 	return &SearXNGService{
 		client:   &http.Client{Timeout: 20 * time.Second},
-		limiter:  rate.NewLimiter(rate.Every(1100*time.Millisecond), 1),
 		endpoint: strings.TrimRight(endpoint, "/"),
 	}
 }
@@ -57,9 +59,6 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 	}
 	if opts.Limit > 100 {
 		opts.Limit = 100
-	}
-	if err := s.limiter.Wait(ctx); err != nil {
-		return nil, 0, fmt.Errorf("rate limit wait: %w", err)
 	}
 
 	u, err := url.Parse(s.endpoint + "/search")
