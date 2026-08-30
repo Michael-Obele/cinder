@@ -6,17 +6,78 @@
 > aggregates Google, Bing, DuckDuckGo, Brave, Mojeek and Wikipedia — free,
 > no per-query cost, and no single fragile engine to scrape.
 
-This guide deploys SearXNG as its **own Fly app** (it is *not* bundled into
-the Cinder image — the Cinder Dockerfile only builds `cinder-api` and
-`cinder-worker`). Once deployed, Cinder reaches it over Fly's private
-network (`http://searxng.internal`), which is free between your apps.
+SearXNG is *not* bundled into the Cinder image (the Cinder Dockerfile only
+builds `cinder-api` and `cinder-worker`), but there are two ways to run it
+on Fly with one app to manage:
 
-## Prerequisites
+- **Option A — same app, separate machine** (sidecar): add a second Fly
+  machine running SearXNG *inside* the `cinder9630` app. One app, one
+  dashboard entry, private-network access for free.
+- **Option B — separate app**: SearXNG as its own Fly app. Cleanest
+  isolation, but a second app to manage.
 
-- `flyctl` installed and logged in (`fly auth login`)
-- The Cinder repo cloned locally (for the `fly secrets` step)
+Both reach SearXNG over Fly's private network (`*.internal`), which is free.
 
-## Step 1 — Create the SearXNG app
+## Option A — Same app, separate machine (sidecar)
+
+The repo already ships the pieces: `deploy/searxng-fly/Dockerfile` bakes the
+JSON-enabled `deploy/searxng/settings.yml` into the official image.
+
+### 1. Build and push the sidecar image
+
+```bash
+cd deploy
+docker build -f searxng-fly/Dockerfile -t registry.fly.io/searxng-json:latest .
+fly auth docker
+docker push registry.fly.io/searxng-json:latest
+```
+
+### 2. Create the SearXNG machine in the SAME app
+
+```bash
+fly machine run registry.fly.io/searxng-json:latest \
+  --app cinder9630 \
+  --name searxng \
+  --process-group searxng \
+  --memory 512 \
+  --region ams
+```
+
+Notes:
+- **No public port** — SearXNG is reached only over the private network, so
+  it is never exposed publicly (no auth on the instance).
+- `--process-group searxng` keeps it out of the app's default group, so
+  `fly deploy` (which manages the Cinder machine) leaves it alone.
+- `--memory 512` gives SearXNG headroom over its ~200–300 MB baseline.
+- Give it `auto_stop`/`auto_start` so it idles out with Cinder and wakes on
+  the first search (one slower first query after idle):
+  `fly machine update searxng --app cinder9630 --auto-stop --auto-start`
+
+### 3. Point Cinder at it
+
+```bash
+fly secrets set --app cinder9630 SEARXNG_ENDPOINT=http://searxng.internal:8080
+```
+
+(`searxng.internal` is the machine's private-network name; `8080` is the
+port SearXNG listens on in the container.)
+
+### 4. Verify
+
+```bash
+# From inside the Cinder machine, SearXNG must answer on the private network:
+fly ssh console --app cinder9630 -C "wget -qO- http://searxng.internal:8080/search?q=golang&format=json | head -c 120"
+
+# Through Cinder:
+curl -s -X POST https://cinder9630.fly.dev/v1/search \
+  -H 'Content-Type: application/json' -d '{"query":"golang concurrency","limit":3}'
+```
+
+---
+
+## Option B — Separate app
+
+### Step 1 — Create the SearXNG app
 
 SearXNG's official image is `searxng/searxng`. We bake a `settings.yml` into
 it so the JSON API (which Cinder queries) is enabled — the stock image has
