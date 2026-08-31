@@ -373,3 +373,106 @@ func TestSearchHandlerResponseFormat(t *testing.T) {
 		t.Error("NextOffset is not set")
 	}
 }
+
+// TestSearchHandlerCategoryValidation verifies the category enum is validated
+// and that valid categories are passed through to the service.
+func TestSearchHandlerCategoryValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		category   string
+		wantStatus int
+		wantErr    bool
+	}{
+		{"general valid", "general", http.StatusOK, false},
+		{"news valid", "news", http.StatusOK, false},
+		{"code valid", "code", http.StatusOK, false},
+		{"invalid returns 400", "invalid", http.StatusBadRequest, true},
+		{"company invalid", "company", http.StatusBadRequest, true},
+		{"empty allowed", "", http.StatusOK, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotCategory string
+			mockService := &MockSearchService{
+				SearchFunc: func(ctx context.Context, opts search.SearchOptions) ([]search.Result, int, error) {
+					gotCategory = opts.Category
+					return []search.Result{{Title: "ok", URL: "https://ok.dev/"}}, 1, nil
+				},
+			}
+			handler := NewSearchHandler(mockService)
+			// Use GET with query param to test pass-through.
+			url := "/search?query=test"
+			if tt.category != "" {
+				url += "&category=" + tt.category
+			}
+			req := httptest.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = req
+			handler.Search(c)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body=%s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if !tt.wantErr && tt.category != "" && gotCategory != tt.category {
+				t.Errorf("service Category = %q, want %q", gotCategory, tt.category)
+			}
+			if tt.wantErr && gotCategory != "" {
+				t.Errorf("service should not have been called for invalid category, got %q", gotCategory)
+			}
+		})
+	}
+}
+
+// TestSearchHandlerCategoryFromJSON verifies category from POST JSON body.
+func TestSearchHandlerCategoryFromJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var gotCategory string
+	mockService := &MockSearchService{
+		SearchFunc: func(ctx context.Context, opts search.SearchOptions) ([]search.Result, int, error) {
+			gotCategory = opts.Category
+			return []search.Result{{Title: "ok", URL: "https://ok.dev/"}}, 1, nil
+		},
+	}
+	handler := NewSearchHandler(mockService)
+	body, _ := json.Marshal(SearchRequest{Query: "test", Category: "news"})
+	req := httptest.NewRequest("POST", "/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	handler.Search(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if gotCategory != "news" {
+		t.Errorf("Category from JSON = %q, want news", gotCategory)
+	}
+}
+
+// TestSearchHandlerCategoryQueryOverridesJSON verifies query param overrides JSON body.
+func TestSearchHandlerCategoryQueryOverridesJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var gotCategory string
+	mockService := &MockSearchService{
+		SearchFunc: func(ctx context.Context, opts search.SearchOptions) ([]search.Result, int, error) {
+			gotCategory = opts.Category
+			return []search.Result{{Title: "ok", URL: "https://ok.dev/"}}, 1, nil
+		},
+	}
+	handler := NewSearchHandler(mockService)
+	body, _ := json.Marshal(SearchRequest{Query: "test", Category: "general"})
+	req := httptest.NewRequest("POST", "/search?category=code", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	handler.Search(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if gotCategory != "code" {
+		t.Errorf("Category = %q, want code (query should override JSON)", gotCategory)
+	}
+}

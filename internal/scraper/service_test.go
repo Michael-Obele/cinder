@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/standard-user/cinder/internal/domain"
+	"golang.org/x/sync/errgroup"
 )
 
 // --- Mock Scrapers ---
@@ -298,5 +299,153 @@ func TestService_BlobFetchParallel(t *testing.T) {
 	// 4 × 200ms serial would be ~800ms; concurrent (limit 5) is ~200ms.
 	if elapsed > 600*time.Millisecond {
 		t.Errorf("blob fetch not parallel: took %v", elapsed)
+	}
+}
+
+// --- Multi-URL sync tests (service parallel via errgroup limit 5) ---
+
+// multiCountingScraper records concurrency and per-URL latency for multi-url tests.
+type multiCountingScraper struct {
+	delay       time.Duration
+	mu          sync.Mutex
+	inflight    int
+	maxInflight int
+}
+
+func (c *multiCountingScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+	c.mu.Lock()
+	c.inflight++
+	if c.inflight > c.maxInflight {
+		c.maxInflight = c.inflight
+	}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.inflight--
+		c.mu.Unlock()
+	}()
+	if c.delay > 0 {
+		select {
+		case <-time.After(c.delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if url == "https://fail.example.com" {
+		return nil, fmt.Errorf("forced failure for %s", url)
+	}
+	return &domain.ScrapeResult{
+		URL:      url,
+		Markdown: "# " + url,
+		HTML:     "<h1>" + url + "</h1>",
+		Metadata: map[string]string{"engine": "counting"},
+	}, nil
+}
+
+func TestService_MultiScrapeParallel_OrderAndLimit(t *testing.T) {
+	scraper := &multiCountingScraper{delay: 120 * time.Millisecond}
+	svc := NewService(scraper, scraper, nil)
+	urls := []string{
+		"https://a.example.com",
+		"https://b.example.com",
+		"https://c.example.com",
+		"https://d.example.com",
+		"https://e.example.com",
+		"https://f.example.com",
+		"https://g.example.com",
+		"https://h.example.com",
+	}
+
+	// Mirror handler's multi-scrape loop: errgroup limit 5, ordered results.
+	type item struct {
+		url      string
+		markdown string
+		err      string
+	}
+	results := make([]item, len(urls))
+	g, ctx := errgroup.WithContext(context.Background())
+	g.SetLimit(5)
+	start := time.Now()
+	for i, u := range urls {
+		i, u := i, u
+		g.Go(func() error {
+			res, err := svc.Scrape(ctx, u, "static", domain.ScrapeOptions{})
+			if err != nil {
+				if ctx.Err() != nil {
+					return err
+				}
+				results[i] = item{url: u, err: err.Error()}
+				return nil
+			}
+			results[i] = item{url: u, markdown: res.Markdown}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("multi scrape aborted: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	// Order preserved.
+	for i, u := range urls {
+		if results[i].url != u {
+			t.Errorf("idx %d url mismatch: got %q want %q", i, results[i].url, u)
+		}
+		if results[i].markdown == "" {
+			t.Errorf("idx %d missing markdown", i)
+		}
+	}
+	// 8 * 120ms / 5 concurrency ≈ 240ms; serial would be 960ms.
+	if elapsed > 700*time.Millisecond {
+		t.Errorf("multi scrape not parallel (limit 5): took %v", elapsed)
+	}
+	scraper.mu.Lock()
+	max := scraper.maxInflight
+	scraper.mu.Unlock()
+	if max > 5 {
+		t.Errorf("concurrency exceeded limit 5: max %d", max)
+	}
+	if max < 2 {
+		t.Errorf("expected concurrency >1, got max %d (not parallel)", max)
+	}
+}
+
+func TestService_MultiScrapePartialFailure(t *testing.T) {
+	scraper := &multiCountingScraper{}
+	svc := NewService(scraper, scraper, nil)
+	urls := []string{"https://a.example.com", "https://fail.example.com", "https://c.example.com"}
+	type item struct {
+		markdown string
+		err      string
+	}
+	results := make([]item, len(urls))
+	g, ctx := errgroup.WithContext(context.Background())
+	g.SetLimit(5)
+	for i, u := range urls {
+		i, u := i, u
+		g.Go(func() error {
+			res, err := svc.Scrape(ctx, u, "static", domain.ScrapeOptions{})
+			if err != nil {
+				if ctx.Err() != nil {
+					return err
+				}
+				results[i] = item{err: err.Error()}
+				return nil
+			}
+			results[i] = item{markdown: res.Markdown}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if results[0].err != "" || results[0].markdown == "" {
+		t.Errorf("idx0 should succeed: %#v", results[0])
+	}
+	if results[1].err == "" {
+		t.Error("idx1 should have error")
+	}
+	if results[2].err != "" || results[2].markdown == "" {
+		t.Errorf("idx2 should succeed: %#v", results[2])
 	}
 }

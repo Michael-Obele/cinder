@@ -25,25 +25,27 @@ Scrapes a given URL and returns its markdown content, metadata, and optionally c
 
 You can send parameters as a JSON body (for `POST`) or as query string parameters (for both `GET` and `POST`).
 
-| Parameter              | Type    | Required | Default | Description                                                                                                              |
-| ---------------------- | ------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `url`                  | string  | **Yes**  | -       | The full URL of the webpage to scrape.                                                                                   |
-| `mode`                 | string  | No       | `smart` | Scraping mode: `smart`, `static`, or `dynamic`.                                                                          |
-| `screenshot`           | boolean | No       | `false` | Capture screenshot (requires mode `dynamic` or `smart`). Returns base64 JPEG blob.                                       |
-| `screenshot_opts`      | object  | No       | -       | Screenshot configuration: `width`, `height`, `full_page`, `format` (`jpeg`/`png`), `quality` (1-100), `wait_selector`.   |
-| `images`               | boolean | No       | `false` | Extract images as base64 blobs from the document.                                                                        |
-| `image_format`         | string  | No       | `url`   | Image transport format: `"url"` (metadata only) or `"blob"` (base64-encoded).                                            |
-| `max_images`           | int     | No       | `10`    | Maximum number of images to extract (quality-ranked: og > hero > content > avatar).                                      |
-| `max_image_size_kb`    | int     | No       | `5120`  | Maximum image file size in KB (default 5MB).                                                                             |
-| `image_process`        | object  | No       | -       | Resize/re-encode blobs: `format` (`jpeg`/`png`), `max_width`, `quality`.                                                 |
-| `actions`              | array   | No       | -       | Page interactions before capture (dynamic only): `wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`. |
-| `extract_schema`       | object  | No       | -       | Deterministic CSS-selector extraction: `{field: {selector, attr?, multiple?}}`.                                          |
-| `summary`              | boolean | No       | `false` | Return an extractive `summary` field (no LLM).                                                                           |
-| `summary_sentences`    | int     | No       | `5`     | Sentence count for the extractive summary.                                                                               |
-| `redact_pii`           | boolean | No       | `false` | Mask emails, phone numbers, and card-shaped digit runs in markdown/summary.                                              |
-| `block_ads`            | boolean | No       | `true`  | Strip common ad/tracker containers before markdown conversion.                                                           |
-| `remove_base64_images` | boolean | No       | `true`  | Drop inline `data:` images before markdown conversion.                                                                   |
-| `render`               | boolean | No       | `false` | _Deprecated_. Behaves the same as `mode=dynamic`.                                                                        |
+| Parameter              | Type     | Required | Default | Description                                                                                                                             |
+| ---------------------- | -------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`                  | string   | **Yes*** | -       | The full URL of the webpage to scrape. *Required unless `urls` is provided. Exclusive with `urls`.                                    |
+| `urls`                 | []string | No       | -       | Sync multi-URL scrape (max 10, exclusive with `url`). Mirrors `web_fetch_exa` multi-URL and Firecrawl `POST /v2/batch/scrape`. Returns `{results: [{url, markdown, metadata, ...}]}` in one call, parallel limit 5, no Redis. Respects `mode`/`images`/etc. per-URL (shared opts). Research: https://docs.firecrawl.dev/features/scrape + https://docs.firecrawl.dev/api-reference/endpoint/scrape — Firecrawl batch uses `urls: []` with `maxConcurrency`; `v2/scrape` is single-URL. |
+| `mode`                 | string   | No       | `smart` | Scraping mode: `smart`, `static`, or `dynamic`.                                                                                         |
+| `screenshot`           | boolean  | No       | `false` | Capture screenshot (requires mode `dynamic` or `smart`). Returns base64 JPEG blob.                                                      |
+| `screenshot_opts`      | object   | No       | -       | Screenshot configuration: `width`, `height`, `full_page`, `format` (`jpeg`/`png`), `quality` (1-100), `wait_selector`.                  |
+| `images`               | boolean  | No       | `false` | Extract images as base64 blobs from the document.                                                                                       |
+| `image_format`         | string   | No       | `url`   | Image transport format: `"url"` (metadata only) or `"blob"` (base64-encoded).                                                           |
+| `max_images`           | int      | No       | `10`    | Maximum number of images to extract (quality-ranked: og > hero > content > avatar).                                                     |
+| `max_image_size_kb`    | int      | No       | `5120`  | Maximum image file size in KB (default 5MB).                                                                                            |
+| `image_process`        | object   | No       | -       | Resize/re-encode blobs: `format` (`jpeg`/`png`), `max_width`, `quality`.                                                                |
+| `actions`              | array    | No       | -       | Page interactions before capture (dynamic only): `wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`.                |
+| `extract_schema`       | object   | No       | -       | Deterministic CSS-selector extraction: `{field: {selector, attr?, multiple?}}`.                                                         |
+| `summary`              | boolean  | No       | `false` | Return an extractive `summary` field (no LLM).                                                                                          |
+| `summary_sentences`    | int      | No       | `5`     | Sentence count for the extractive summary.                                                                                              |
+| `redact_pii`           | boolean  | No       | `false` | Mask emails, phone numbers, and card-shaped digit runs in markdown/summary.                                                             |
+| `block_ads`            | boolean  | No       | `true`  | Strip common ad/tracker containers before markdown conversion.                                                                          |
+| `remove_base64_images` | boolean  | No       | `true`  | Drop inline `data:` images before markdown conversion.                                                                                  |
+| `include_links`        | boolean  | No       | `true`  | Include `links: [{url, text, isInternal}]` extracted from readability DOM (resolved absolute, deduped, same-host flagged). Matches Firecrawl `formats: ["links"]` (Firecrawl returns string array; Cinder returns enriched objects). Disable with `include_links: false` or `?include_links=false`. Cache key includes this flag. |
+| `render`               | boolean  | No       | `false` | _Deprecated_. Behaves the same as `mode=dynamic`.                                                                                       |
 
 ### Example Request (`POST`)
 
@@ -70,7 +72,46 @@ curl -X POST http://localhost:8080/v1/scrape \
 curl "http://localhost:8080/v1/scrape?url=https://example.com&mode=smart"
 ```
 
-### Example Response
+### Example Request — Sync Multi-URL (`urls: []`)
+
+Mirrors `web_fetch_exa` and Firecrawl `POST /v2/batch/scrape` (https://docs.firecrawl.dev/api-reference/endpoint/batch-scrape) but synchronous — no Redis, no polling. Research captured via `http://localhost:3002/v1/scrape` against https://docs.firecrawl.dev/features/scrape and https://docs.firecrawl.dev/api-reference/endpoint/scrape: Firecrawl single-URL `POST /v2/scrape` returns `{success, data:{markdown,html,metadata}}`; batch is `POST /v2/batch/scrape` with `urls: []` + `maxConcurrency`. Cinder's sync variant reuses `Service.Scrape` per URL with `errgroup` limit 5, ordered results.
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["https://example.com","https://example.org"], "mode":"smart", "images": true}'
+```
+
+### Example Response — Multi-URL
+
+```json
+{
+  "results": [
+    {
+      "url": "https://example.com",
+      "title": "Example Domain",
+      "word_count": 42,
+      "markdown": "# Example Domain\n\nThis domain is for use in ...",
+      "metadata": {"title":"Example Domain","description":"Example Domain"},
+      "html": "<!doctype html>...",
+      "images": [],
+      "extracted": null,
+      "summary": null
+    },
+    {
+      "url": "https://example.org",
+      "title": "Example Org",
+      "word_count": 38,
+      "markdown": "# Example Org\n...",
+      "metadata": {"title":"Example Org"},
+      "error": "scrape failed: ..." 
+    }
+  ]
+}
+```
+> On partial failure an entry carries `"error"` and no `markdown`; successful entries are ordered as requested. Validation: `urls` max 10, exclusive with `url`, each URL must be `http(s)`.
+
+### Example Response — Single URL
 
 ```json
 {
@@ -80,17 +121,20 @@ curl "http://localhost:8080/v1/scrape?url=https://example.com&mode=smart"
   "metadata": {
     "title": "Example Domain",
     "description": "Example Domain Description"
-  }
+  },
+  "links": [
+    {"url": "https://www.iana.org/domains/example", "text": "More information...", "isInternal": false}
+  ]
 }
 ```
 
-_(Note: If `screenshot` or `images` are requested, the response payload will also contain `screenshot` and `images` objects with base64 data strings)._
+_(Note: If `screenshot` or `images` are requested, the response payload will also contain `screenshot` and `images` objects with base64 data strings). `links` is included by default (`include_links: true`) — set `include_links: false` to omit. Research via `http://localhost:3002/v1/scrape` with `formats: ["links"]` on https://docs.firecrawl.dev/features/scrape showed Firecrawl returns `links: ["https://..."]` (string array); Cinder enriches to `{url, text, isInternal}` after readability, resolved absolute and deduped. For multi-URL the same fields appear per entry inside `results`._
 
 ---
 
 ## 2. Search
 
-Searches the web using the configured search provider (Brave Search) and returns a list of matching results. Requires `BRAVE_SEARCH_API_KEY` configuration.
+Searches the web using the configured search provider (SearXNG primary, Brave fallback) and returns a list of matching results.
 
 ### Endpoints
 
@@ -99,16 +143,18 @@ Searches the web using the configured search provider (Brave Search) and returns
 
 ### Request Parameters
 
-| Parameter        | Type          | Required | Default | Description                                                    |
-| ---------------- | ------------- | -------- | ------- | -------------------------------------------------------------- |
-| `query` or `q`   | string        | **Yes**  | -       | The search query.                                              |
-| `offset`         | int           | No       | `0`     | Pagination offset.                                             |
-| `limit`          | int           | No       | `10`    | Pagination limit (Maximum: 100).                               |
-| `mode`           | string        | No       | -       | Search speed: `"fast"` restricts to recent results (last day). |
-| `includeDomains` | array[string] | No       | -       | Restrict results to these domains (e.g. `["wikipedia.org"]`).  |
-| `excludeDomains` | array[string] | No       | -       | Exclude results from these domains.                            |
-| `requiredText`   | array[string] | No       | -       | Filter results containing this text.                           |
-| `maxAge`         | int           | No       | -       | Max age in days: `1` (day), `7` (week), `30` (month).          |
+| Parameter        | Type          | Required | Default   | Description                                                    |
+| ---------------- | ------------- | -------- | --------- | -------------------------------------------------------------- |
+| `query` or `q`   | string        | **Yes**  | -         | The search query.                                              |
+| `offset`         | int           | No       | `0`       | Pagination offset.                                             |
+| `limit`          | int           | No       | `10`      | Pagination limit (Maximum: 100).                               |
+| `category`       | string        | No       | `general` | Category filter: `general`, `news`, `code`. Maps to SearXNG `categories` (`general`/`news`/`it`) and Brave `search_type`. Validated enum — invalid value returns 400. `GET /v1/search?category=news` only returns news. Cache key includes category. Research via `http://localhost:3002/v1/scrape`: Exa `category` (docs.exa.ai/reference/search) supports `company`, `publication`, `news`, `people`; Firecrawl `sources`/`categories` (docs.firecrawl.dev/features/search + /api-reference/endpoint/search) uses `sources=["web","news","images"]` and `categories=["research","pdf","developer"]`; SearXNG `categories` (docs.searxng.org/dev/search_api.html) is comma-separated list (`general`, `news`, `it`, ...). |
+| `rerank`         | bool          | No       | `false`   | Lightweight TF-IDF re-rank (pure Go, no ONNX) — reorders by query-term TF-IDF blended with original relevance. Opt-in `?rerank=true` or `{"rerank": true}`. Firecrawl research: `bge-small` needs ONNX runtime + CGO, breaks hobby-tier binary; TF-IDF gives 80% gain with 0 deps. Cache key includes flag. |
+| `mode`           | string        | No       | -         | Search speed: `"fast"` restricts to recent results (last day). Legacy: `mode=news\|code` maps to `category` when `category` absent. |
+| `includeDomains` | array[string] | No       | -         | Restrict results to these domains (e.g. `["wikipedia.org"]`).  |
+| `excludeDomains` | array[string] | No       | -         | Exclude results from these domains.                            |
+| `requiredText`   | array[string] | No       | -         | Filter results containing this text.                           |
+| `maxAge`         | int           | No       | -         | Max age in days: `1` (day), `7` (week), `30` (month).          |
 
 ### Example Request (`POST`)
 
@@ -131,7 +177,9 @@ curl -X POST http://localhost:8080/v1/search \
     {
       "title": "Cinder on GitHub",
       "url": "https://github.com/standard-user/cinder",
-      "description": "A high-performance web crawling API..."
+      "description": "A high-performance web crawling API...",
+      "highlights": ["…high-performance web crawling API…"],
+      "relevance": 0.85
     }
   ],
   "hasMore": true,
@@ -139,6 +187,7 @@ curl -X POST http://localhost:8080/v1/search \
   "count": 1
 }
 ```
+> Results include `highlights: ["…query-biased 120-char window…"]` per hit (Firecrawl `highlights:true` parity, always returned, 120-char window around first query term). Use `rerank=true` to TF-IDF re-rank by term frequency.
 
 ---
 

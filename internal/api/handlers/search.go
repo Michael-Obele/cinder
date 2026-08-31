@@ -17,6 +17,8 @@ type SearchRequest struct {
 	RequiredText   []string `json:"requiredText,omitempty"`
 	MaxAge         *int     `json:"maxAge,omitempty"`
 	Mode           string   `json:"mode"`
+	Category       string   `json:"category"`
+	Rerank         bool     `json:"rerank"`
 }
 
 type SearchResponse struct {
@@ -47,6 +49,8 @@ func NewSearchHandler(s search.Service) *SearchHandler {
 // @Param        q              query     string  false  "Alias for query"
 // @Param        offset         query     int     false  "Pagination offset"
 // @Param        limit          query     int     false  "Pagination limit (max 100)"
+// @Param        category       query     string  false  "Category filter: general, news, code" Enums(general,news,code)
+// @Param        rerank         query     bool    false  "Lightweight TF-IDF re-rank (pure Go, no ONNX)"
 // @Param        body           body      SearchRequest  false  "JSON request body"
 // @Success      200    {object}  SearchResponse
 // @Failure      400    {object}  map[string]interface{}
@@ -81,10 +85,24 @@ func (h *SearchHandler) Search(c *gin.Context) {
 			req.Limit = limit
 		}
 	}
+	if cat := c.Query("category"); cat != "" {
+		req.Category = cat
+	}
+	if r := c.Query("rerank"); r != "" {
+		if b, err := strconv.ParseBool(r); err == nil {
+			req.Rerank = b
+		} else if r == "1" {
+			req.Rerank = true
+		}
+	}
 
 	// Validate query
 	if req.Query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter is required"})
+		return
+	}
+	if err := search.ValidateCategory(req.Category); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -108,6 +126,8 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		RequiredText:   req.RequiredText,
 		MaxAge:         req.MaxAge,
 		Mode:           req.Mode,
+		Category:       req.Category,
+		Rerank:         req.Rerank,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

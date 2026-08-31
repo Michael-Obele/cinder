@@ -196,3 +196,198 @@ func TestNewScrapeHandler(t *testing.T) {
 		t.Fatal("NewScrapeHandler should not return nil")
 	}
 }
+
+// --- Multi-URL sync tests (POST /v1/scrape with urls: []) ---
+
+// dynamicMock returns per-URL results, capturing the concurrency limit.
+type dynamicMock struct {
+	results map[string]*domain.ScrapeResult
+	errMap  map[string]error
+}
+
+func (m *dynamicMock) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+	if err, ok := m.errMap[url]; ok {
+		return nil, err
+	}
+	if r, ok := m.results[url]; ok {
+		return r, nil
+	}
+	return &domain.ScrapeResult{URL: url, Markdown: "# " + url, HTML: "<h1>" + url + "</h1>", Metadata: map[string]string{"engine": "mock"}}, nil
+}
+
+func TestScrapeHandler_MultiURL_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mock := &dynamicMock{
+		results: map[string]*domain.ScrapeResult{
+			"https://example.com": {URL: "https://example.com", Markdown: "# Example", HTML: "<h1>Example</h1>", Metadata: map[string]string{"engine": "colly"}},
+			"https://example.org": {URL: "https://example.org", Markdown: "# Org", HTML: "<h1>Org</h1>", Metadata: map[string]string{"engine": "colly"}},
+		},
+	}
+	svc := scraper.NewService(mock, mock, nil)
+	h := NewScrapeHandler(svc)
+
+	body, _ := json.Marshal(ScrapeRequest{URLs: []string{"https://example.com", "https://example.org"}, Mode: "static"})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body %s", w.Code, w.Body.String())
+	}
+	var resp MultiScrapeResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal multi response: %v body %s", err, w.Body.String())
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(resp.Results))
+	}
+	// Order must be preserved.
+	if resp.Results[0].URL != "https://example.com" || resp.Results[1].URL != "https://example.org" {
+		t.Errorf("order mismatch: %#v", resp.Results)
+	}
+	if resp.Results[0].Markdown != "# Example" || resp.Results[1].Markdown != "# Org" {
+		t.Errorf("markdown mismatch: %#v", resp.Results)
+	}
+	// Also works via gin.H generic decode
+	var generic map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &generic); err == nil {
+		if _, ok := generic["results"]; !ok {
+			t.Error("expected 'results' key in multi response")
+		}
+	}
+}
+
+func TestScrapeHandler_MultiURL_Exclusive(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := setupScrapeHandler()
+	body, _ := json.Marshal(ScrapeRequest{URL: "https://example.com", URLs: []string{"https://example.org"}})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for exclusive url/urls, got %d body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestScrapeHandler_MultiURL_Max10(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := setupScrapeHandler()
+	urls := make([]string, 11)
+	for i := range urls {
+		urls[i] = "https://example.com/" + string(rune('a'+i))
+	}
+	body, _ := json.Marshal(ScrapeRequest{URLs: urls})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for >10 urls, got %d body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestScrapeHandler_MultiURL_InvalidURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := setupScrapeHandler()
+	body, _ := json.Marshal(ScrapeRequest{URLs: []string{"https://example.com", "not-a-url"}})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid url, got %d body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestScrapeHandler_MultiURL_PartialFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mock := &dynamicMock{
+		results: map[string]*domain.ScrapeResult{
+			"https://good.example.com": {URL: "https://good.example.com", Markdown: "# Good", HTML: "<h1>Good</h1>", Metadata: map[string]string{}},
+		},
+		errMap: map[string]error{
+			"https://bad.example.com": context.DeadlineExceeded,
+		},
+	}
+	// Need both colly and chromedp to handle smart fallback; provide mock for both
+	svc := scraper.NewService(mock, mock, nil)
+	h := NewScrapeHandler(svc)
+	body, _ := json.Marshal(ScrapeRequest{URLs: []string{"https://good.example.com", "https://bad.example.com"}, Mode: "static"})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with partial failure, got %d body %s", w.Code, w.Body.String())
+	}
+	var resp MultiScrapeResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(resp.Results))
+	}
+	if resp.Results[0].Error != "" {
+		t.Errorf("first item should succeed, got error %q", resp.Results[0].Error)
+	}
+	if resp.Results[1].Error == "" {
+		t.Error("second item should contain error")
+	}
+	if resp.Results[0].Markdown == "" {
+		t.Error("first item markdown missing")
+	}
+}
+
+func TestScrapeHandler_MultiURL_SingleStillWorks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := setupScrapeHandler()
+	body, _ := json.Marshal(ScrapeRequest{URL: "https://example.com", Mode: "static"})
+	req := httptest.NewRequest("POST", "/scrape", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	h.Scrape(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body %s", w.Code, w.Body.String())
+	}
+	// Must NOT contain results array.
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(w.Body.Bytes(), &m)
+	if _, ok := m["results"]; ok {
+		t.Error("single-url response should not contain 'results'")
+	}
+	if _, ok := m["url"]; !ok {
+		t.Error("single-url response should contain 'url'")
+	}
+}
+
+func TestIsValidURL(t *testing.T) {
+	tests := []struct {
+		u    string
+		want bool
+	}{
+		{"https://example.com", true},
+		{"http://example.com/path?q=1", true},
+		{"ftp://example.com", false},
+		{"not-a-url", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isValidURL(tt.u); got != tt.want {
+			t.Errorf("isValidURL(%q)=%v want %v", tt.u, got, tt.want)
+		}
+	}
+}

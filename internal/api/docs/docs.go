@@ -347,7 +347,7 @@ const docTemplate = `{
         },
         "/scrape": {
             "get": {
-                "description": "Scrapes a given URL and returns its markdown content, metadata, and optionally captures a screenshot or extracts images if enabled.",
+                "description": "Scrapes a given URL and returns its markdown content, metadata, links, and optionally captures a screenshot or extracts images if enabled. Links are extracted from readability DOM, resolved to absolute URLs, deduped, and flagged isInternal via same-host check — matching Firecrawl ` + "`" + `formats: [\"links\"]` + "`" + ` (Firecrawl returns ` + "`" + `links: [\"https://...\"]` + "`" + `; Cinder enriches to ` + "`" + `links: [{url, text, isInternal}]` + "`" + `). Include_links defaults to true. Accepts either ` + "`" + `url` + "`" + ` (single) or ` + "`" + `urls` + "`" + ` (up to 10) for synchronous multi-URL scrape; when ` + "`" + `urls` + "`" + ` is used the response is ` + "`" + `{results: [{url, markdown, metadata, ...}]}` + "`" + `. Mirrors Firecrawl ` + "`" + `POST /v2/scrape` + "`" + ` (single) and ` + "`" + `POST /v2/batch/scrape` + "`" + ` (multi) and the ` + "`" + `web_fetch_exa` + "`" + ` multi-URL shape — see https://docs.firecrawl.dev/features/scrape and https://docs.firecrawl.dev/api-reference/endpoint/scrape. Research via http://localhost:3002/v1/scrape against those docs showed ` + "`" + `links` + "`" + ` as string array; Cinder returns objects with text/isInternal.",
                 "consumes": [
                     "application/json"
                 ],
@@ -361,8 +361,14 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "The URL to scrape",
+                        "description": "The URL to scrape (single mode)",
                         "name": "url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON array alternative: use POST body {\\",
+                        "name": "urls",
                         "in": "query"
                     },
                     {
@@ -408,7 +414,13 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "description": "JSON request body (alternative to query params)",
+                        "type": "boolean",
+                        "description": "Include extracted links (default true)",
+                        "name": "include_links",
+                        "in": "query"
+                    },
+                    {
+                        "description": "JSON request body (alternative to query params). Provide either ` + "`" + `url` + "`" + ` or ` + "`" + `urls` + "`" + ` (max 10, exclusive).",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -418,9 +430,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "multi URL (when urls is provided)",
                         "schema": {
-                            "$ref": "#/definitions/domain.ScrapeResult"
+                            "$ref": "#/definitions/handlers.MultiScrapeResponse"
                         }
                     },
                     "400": {
@@ -440,7 +452,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Scrapes a given URL and returns its markdown content, metadata, and optionally captures a screenshot or extracts images if enabled.",
+                "description": "Scrapes a given URL and returns its markdown content, metadata, links, and optionally captures a screenshot or extracts images if enabled. Links are extracted from readability DOM, resolved to absolute URLs, deduped, and flagged isInternal via same-host check — matching Firecrawl ` + "`" + `formats: [\"links\"]` + "`" + ` (Firecrawl returns ` + "`" + `links: [\"https://...\"]` + "`" + `; Cinder enriches to ` + "`" + `links: [{url, text, isInternal}]` + "`" + `). Include_links defaults to true. Accepts either ` + "`" + `url` + "`" + ` (single) or ` + "`" + `urls` + "`" + ` (up to 10) for synchronous multi-URL scrape; when ` + "`" + `urls` + "`" + ` is used the response is ` + "`" + `{results: [{url, markdown, metadata, ...}]}` + "`" + `. Mirrors Firecrawl ` + "`" + `POST /v2/scrape` + "`" + ` (single) and ` + "`" + `POST /v2/batch/scrape` + "`" + ` (multi) and the ` + "`" + `web_fetch_exa` + "`" + ` multi-URL shape — see https://docs.firecrawl.dev/features/scrape and https://docs.firecrawl.dev/api-reference/endpoint/scrape. Research via http://localhost:3002/v1/scrape against those docs showed ` + "`" + `links` + "`" + ` as string array; Cinder returns objects with text/isInternal.",
                 "consumes": [
                     "application/json"
                 ],
@@ -454,8 +466,14 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "The URL to scrape",
+                        "description": "The URL to scrape (single mode)",
                         "name": "url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON array alternative: use POST body {\\",
+                        "name": "urls",
                         "in": "query"
                     },
                     {
@@ -501,7 +519,13 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "description": "JSON request body (alternative to query params)",
+                        "type": "boolean",
+                        "description": "Include extracted links (default true)",
+                        "name": "include_links",
+                        "in": "query"
+                    },
+                    {
+                        "description": "JSON request body (alternative to query params). Provide either ` + "`" + `url` + "`" + ` or ` + "`" + `urls` + "`" + ` (max 10, exclusive).",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -511,9 +535,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "multi URL (when urls is provided)",
                         "schema": {
-                            "$ref": "#/definitions/domain.ScrapeResult"
+                            "$ref": "#/definitions/handlers.MultiScrapeResponse"
                         }
                     },
                     "400": {
@@ -569,6 +593,23 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Pagination limit (max 100)",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "general",
+                            "news",
+                            "code"
+                        ],
+                        "type": "string",
+                        "description": "Category filter: general, news, code",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Lightweight TF-IDF re-rank (pure Go, no ONNX)",
+                        "name": "rerank",
                         "in": "query"
                     },
                     {
@@ -638,6 +679,23 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Pagination limit (max 100)",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "general",
+                            "news",
+                            "code"
+                        ],
+                        "type": "string",
+                        "description": "Category filter: general, news, code",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Lightweight TF-IDF re-rank (pure Go, no ONNX)",
+                        "name": "rerank",
                         "in": "query"
                     },
                     {
@@ -722,6 +780,20 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.LinkData": {
+            "type": "object",
+            "properties": {
+                "isInternal": {
+                    "type": "boolean"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.ScrapeResult": {
             "type": "object",
             "properties": {
@@ -737,6 +809,13 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/domain.ImageData"
+                    }
+                },
+                "links": {
+                    "description": "Links holds extracted hyperlinks (after readability, deduped, absolute).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.LinkData"
                     }
                 },
                 "markdown": {
@@ -1036,11 +1115,70 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.MultiScrapeItem": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "extracted": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "html": {
+                    "type": "string"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.ImageData"
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.LinkData"
+                    }
+                },
+                "markdown": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "screenshot": {
+                    "$ref": "#/definitions/domain.ScreenshotData"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "word_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.MultiScrapeResponse": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.MultiScrapeItem"
+                    }
+                }
+            }
+        },
         "handlers.ScrapeRequest": {
             "type": "object",
-            "required": [
-                "url"
-            ],
             "properties": {
                 "actions": {
                     "type": "array",
@@ -1065,6 +1203,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/handlers.ImageProcessReq"
                 },
                 "images": {
+                    "type": "boolean"
+                },
+                "include_links": {
                     "type": "boolean"
                 },
                 "max_image_size_kb": {
@@ -1101,6 +1242,12 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
+                },
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -1133,6 +1280,9 @@ const docTemplate = `{
                 "query"
             ],
             "properties": {
+                "category": {
+                    "type": "string"
+                },
                 "excludeDomains": {
                     "type": "array",
                     "items": {
@@ -1165,6 +1315,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "rerank": {
+                    "type": "boolean"
                 }
             }
         },
@@ -1199,6 +1352,12 @@ const docTemplate = `{
                 },
                 "domain": {
                     "type": "string"
+                },
+                "highlights": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "id": {
                     "type": "string"

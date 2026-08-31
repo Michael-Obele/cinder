@@ -2,6 +2,15 @@ package domain
 
 import "context"
 
+// LinkData represents one extracted hyperlink, mirroring Firecrawl's `links` format.
+// Firecrawl (self-hosted at http://localhost:3002) returns `links: ["https://..."]` as strings;
+// Cinder enriches each entry with anchor text and a same-host flag for parity.
+type LinkData struct {
+	URL        string `json:"url"`
+	Text       string `json:"text,omitempty"`
+	IsInternal bool   `json:"isInternal"`
+}
+
 type ScrapeResult struct {
 	URL      string            `json:"url"`
 	Markdown string            `json:"markdown"`
@@ -11,6 +20,9 @@ type ScrapeResult struct {
 	// Image fields (omitted when not requested)
 	Screenshot *ScreenshotData `json:"screenshot,omitempty"`
 	Images     []ImageData     `json:"images,omitempty"`
+
+	// Links holds extracted hyperlinks (after readability, deduped, absolute).
+	Links []LinkData `json:"links,omitempty"`
 
 	// Extracted holds deterministic schema-extraction results.
 	Extracted map[string]any `json:"extracted,omitempty"`
@@ -42,6 +54,7 @@ type ScrapeOptions struct {
 	RedactPII          bool                    `json:"redact_pii,omitempty"`
 	BlockAds           *bool                   `json:"block_ads,omitempty"`
 	RemoveBase64Images *bool                   `json:"remove_base64_images,omitempty"`
+	IncludeLinks       *bool                   `json:"include_links,omitempty"`
 }
 
 // Action is a single page interaction executed before content capture

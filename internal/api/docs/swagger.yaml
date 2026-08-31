@@ -31,6 +31,15 @@ definitions:
       width:
         type: integer
     type: object
+  domain.LinkData:
+    properties:
+      isInternal:
+        type: boolean
+      text:
+        type: string
+      url:
+        type: string
+    type: object
   domain.ScrapeResult:
     properties:
       extracted:
@@ -42,6 +51,12 @@ definitions:
       images:
         items:
           $ref: '#/definitions/domain.ImageData'
+        type: array
+      links:
+        description: Links holds extracted hyperlinks (after readability, deduped,
+          absolute).
+        items:
+          $ref: '#/definitions/domain.LinkData'
         type: array
       markdown:
         type: string
@@ -237,6 +252,47 @@ definitions:
       url:
         type: string
     type: object
+  handlers.MultiScrapeItem:
+    properties:
+      error:
+        type: string
+      extracted:
+        additionalProperties: {}
+        type: object
+      html:
+        type: string
+      images:
+        items:
+          $ref: '#/definitions/domain.ImageData'
+        type: array
+      links:
+        items:
+          $ref: '#/definitions/domain.LinkData'
+        type: array
+      markdown:
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      screenshot:
+        $ref: '#/definitions/domain.ScreenshotData'
+      summary:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+      word_count:
+        type: integer
+    type: object
+  handlers.MultiScrapeResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/handlers.MultiScrapeItem'
+        type: array
+    type: object
   handlers.ScrapeRequest:
     properties:
       actions:
@@ -255,6 +311,8 @@ definitions:
       image_process:
         $ref: '#/definitions/handlers.ImageProcessReq'
       images:
+        type: boolean
+      include_links:
         type: boolean
       max_image_size_kb:
         type: integer
@@ -280,8 +338,10 @@ definitions:
         type: integer
       url:
         type: string
-    required:
-    - url
+      urls:
+        items:
+          type: string
+        type: array
     type: object
   handlers.ScreenshotOpts:
     properties:
@@ -300,6 +360,8 @@ definitions:
     type: object
   handlers.SearchRequest:
     properties:
+      category:
+        type: string
       excludeDomains:
         items:
           type: string
@@ -322,6 +384,8 @@ definitions:
         items:
           type: string
         type: array
+      rerank:
+        type: boolean
     required:
     - query
     type: object
@@ -346,6 +410,10 @@ definitions:
         type: string
       domain:
         type: string
+      highlights:
+        items:
+          type: string
+        type: array
       id:
         type: string
       relevance:
@@ -601,12 +669,27 @@ paths:
     get:
       consumes:
       - application/json
-      description: Scrapes a given URL and returns its markdown content, metadata,
-        and optionally captures a screenshot or extracts images if enabled.
+      description: 'Scrapes a given URL and returns its markdown content, metadata,
+        links, and optionally captures a screenshot or extracts images if enabled.
+        Links are extracted from readability DOM, resolved to absolute URLs, deduped,
+        and flagged isInternal via same-host check — matching Firecrawl `formats:
+        ["links"]` (Firecrawl returns `links: ["https://..."]`; Cinder enriches to
+        `links: [{url, text, isInternal}]`). Include_links defaults to true. Accepts
+        either `url` (single) or `urls` (up to 10) for synchronous multi-URL scrape;
+        when `urls` is used the response is `{results: [{url, markdown, metadata,
+        ...}]}`. Mirrors Firecrawl `POST /v2/scrape` (single) and `POST /v2/batch/scrape`
+        (multi) and the `web_fetch_exa` multi-URL shape — see https://docs.firecrawl.dev/features/scrape
+        and https://docs.firecrawl.dev/api-reference/endpoint/scrape. Research via
+        http://localhost:3002/v1/scrape against those docs showed `links` as string
+        array; Cinder returns objects with text/isInternal.'
       parameters:
-      - description: The URL to scrape
+      - description: The URL to scrape (single mode)
         in: query
         name: url
+        type: string
+      - description: 'JSON array alternative: use POST body {\'
+        in: query
+        name: urls
         type: string
       - description: 'Scraping mode: smart, static, dynamic'
         in: query
@@ -637,7 +720,12 @@ paths:
         in: query
         name: max_image_size_kb
         type: integer
-      - description: JSON request body (alternative to query params)
+      - description: Include extracted links (default true)
+        in: query
+        name: include_links
+        type: boolean
+      - description: JSON request body (alternative to query params). Provide either
+          `url` or `urls` (max 10, exclusive).
         in: body
         name: body
         schema:
@@ -646,9 +734,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: multi URL (when urls is provided)
           schema:
-            $ref: '#/definitions/domain.ScrapeResult'
+            $ref: '#/definitions/handlers.MultiScrapeResponse'
         "400":
           description: Bad Request
           schema:
@@ -665,12 +753,27 @@ paths:
     post:
       consumes:
       - application/json
-      description: Scrapes a given URL and returns its markdown content, metadata,
-        and optionally captures a screenshot or extracts images if enabled.
+      description: 'Scrapes a given URL and returns its markdown content, metadata,
+        links, and optionally captures a screenshot or extracts images if enabled.
+        Links are extracted from readability DOM, resolved to absolute URLs, deduped,
+        and flagged isInternal via same-host check — matching Firecrawl `formats:
+        ["links"]` (Firecrawl returns `links: ["https://..."]`; Cinder enriches to
+        `links: [{url, text, isInternal}]`). Include_links defaults to true. Accepts
+        either `url` (single) or `urls` (up to 10) for synchronous multi-URL scrape;
+        when `urls` is used the response is `{results: [{url, markdown, metadata,
+        ...}]}`. Mirrors Firecrawl `POST /v2/scrape` (single) and `POST /v2/batch/scrape`
+        (multi) and the `web_fetch_exa` multi-URL shape — see https://docs.firecrawl.dev/features/scrape
+        and https://docs.firecrawl.dev/api-reference/endpoint/scrape. Research via
+        http://localhost:3002/v1/scrape against those docs showed `links` as string
+        array; Cinder returns objects with text/isInternal.'
       parameters:
-      - description: The URL to scrape
+      - description: The URL to scrape (single mode)
         in: query
         name: url
+        type: string
+      - description: 'JSON array alternative: use POST body {\'
+        in: query
+        name: urls
         type: string
       - description: 'Scraping mode: smart, static, dynamic'
         in: query
@@ -701,7 +804,12 @@ paths:
         in: query
         name: max_image_size_kb
         type: integer
-      - description: JSON request body (alternative to query params)
+      - description: Include extracted links (default true)
+        in: query
+        name: include_links
+        type: boolean
+      - description: JSON request body (alternative to query params). Provide either
+          `url` or `urls` (max 10, exclusive).
         in: body
         name: body
         schema:
@@ -710,9 +818,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: multi URL (when urls is provided)
           schema:
-            $ref: '#/definitions/domain.ScrapeResult'
+            $ref: '#/definitions/handlers.MultiScrapeResponse'
         "400":
           description: Bad Request
           schema:
@@ -749,6 +857,18 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: 'Category filter: general, news, code'
+        enum:
+        - general
+        - news
+        - code
+        in: query
+        name: category
+        type: string
+      - description: Lightweight TF-IDF re-rank (pure Go, no ONNX)
+        in: query
+        name: rerank
+        type: boolean
       - description: JSON request body
         in: body
         name: body
@@ -796,6 +916,18 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: 'Category filter: general, news, code'
+        enum:
+        - general
+        - news
+        - code
+        in: query
+        name: category
+        type: string
+      - description: Lightweight TF-IDF re-rank (pure Go, no ONNX)
+        in: query
+        name: rerank
+        type: boolean
       - description: JSON request body
         in: body
         name: body

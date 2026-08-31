@@ -60,6 +60,9 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 	if opts.Limit > 100 {
 		opts.Limit = 100
 	}
+	if err := ValidateCategory(opts.Category); err != nil {
+		return nil, 0, err
+	}
 
 	u, err := url.Parse(s.endpoint + "/search")
 	if err != nil {
@@ -82,8 +85,23 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 			q.Set("time_range", "month")
 		}
 	}
-	// Map Exa-style category hints onto SearXNG categories where possible.
-	if opts.Mode != "" {
+	// Map explicit Category (general|news|code) to SearXNG categories.
+	// Research via Firecrawl docker at http://localhost:3002:
+	//  - Exa: category param accepts company, publication, news, people, etc. (docs.exa.ai/reference/search)
+	//  - Firecrawl: sources=[web,news,images] and categories=[research,pdf,developer] (docs.firecrawl.dev/features/search + /api-reference/endpoint/search)
+	//  - SearXNG: categories query param is comma-separated (general, news, it, ...) per docs.searxng.org/dev/search_api.html
+	// Mapping condensed to three buckets: general→general, news→news, code→it.
+	if opts.Category != "" {
+		switch opts.Category {
+		case "general":
+			q.Set("categories", "general")
+		case "news":
+			q.Set("categories", "news")
+		case "code":
+			q.Set("categories", "it")
+		}
+	} else if opts.Mode != "" {
+		// Legacy Mode mapping retained for backwards compatibility when Category is absent.
 		switch opts.Mode {
 		case "news":
 			q.Set("categories", "news")
@@ -133,7 +151,12 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 			ID:          fmt.Sprintf("%s_%d", opts.Query, opts.Offset+i),
 			Domain:      extractDomain(r.URL),
 			Relevance:   relevance,
+			Highlights:  extractHighlights(r.Content, opts.Query),
 		})
+	}
+
+	if opts.Rerank {
+		results = rerankTFIDF(opts.Query, results)
 	}
 
 	total := out.NumberOfResults
@@ -145,4 +168,65 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 		total = opts.Offset + len(results) + 1
 	}
 	return results, total, nil
+}
+
+// extractHighlights returns a single query-biased snippet (120-char window) around the first
+// query term found in description, mirroring Firecrawl/Exa highlights. Case-insensitive,
+// word-boundary aware. Firecrawl research: highlights are query-relevant excerpts, not plain description.
+func extractHighlights(description, query string) []string {
+	if description == "" || query == "" {
+		return nil
+	}
+	terms := strings.Fields(query)
+	if len(terms) == 0 {
+		return nil
+	}
+	lowerDesc := strings.ToLower(description)
+	bestIdx := -1
+	bestTerm := ""
+	for _, t := range terms {
+		lt := strings.ToLower(t)
+		if idx := strings.Index(lowerDesc, lt); idx != -1 {
+			if bestIdx == -1 || idx < bestIdx {
+				bestIdx = idx
+				bestTerm = t
+			}
+		}
+	}
+	if bestIdx == -1 {
+		// No term found — fallback to truncated description (120 chars)
+		if len(description) > 120 {
+			return []string{strings.TrimSpace(description[:120]) + "…"}
+		}
+		return []string{description}
+	}
+	// 60 chars before, term, 60 after = ~120 window
+	start := bestIdx - 60
+	if start < 0 {
+		start = 0
+	} else {
+		// snap to word boundary
+		if sp := strings.Index(description[start:bestIdx], " "); sp != -1 && sp < 10 {
+			start += sp + 1
+		}
+	}
+	end := bestIdx + len(bestTerm) + 60
+	if end > len(description) {
+		end = len(description)
+	} else {
+		if sp := strings.LastIndex(description[bestIdx+len(bestTerm):end], " "); sp != -1 {
+			end = bestIdx + len(bestTerm) + sp
+		}
+	}
+	snippet := strings.TrimSpace(description[start:end])
+	if start > 0 {
+		snippet = "…" + snippet
+	}
+	if end < len(description) {
+		snippet += "…"
+	}
+	if snippet == "" {
+		return nil
+	}
+	return []string{snippet}
 }

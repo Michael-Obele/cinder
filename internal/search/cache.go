@@ -92,6 +92,8 @@ func searchCacheKey(opts SearchOptions) string {
 		RequiredText   []string `json:"req,omitempty"`
 		MaxAge         *int     `json:"age,omitempty"`
 		Mode           string   `json:"mode,omitempty"`
+		Category       string   `json:"cat,omitempty"`
+		Rerank         bool     `json:"rerank,omitempty"`
 	}{
 		Query:          opts.Query,
 		Offset:         opts.Offset,
@@ -101,6 +103,8 @@ func searchCacheKey(opts SearchOptions) string {
 		RequiredText:   opts.RequiredText,
 		MaxAge:         opts.MaxAge,
 		Mode:           opts.Mode,
+		Category:       opts.Category,
+		Rerank:         opts.Rerank,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

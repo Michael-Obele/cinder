@@ -81,3 +81,6 @@ node_modules/
 /testdata-*.json
 /scratch*.json
 /*.local.json
+
+# Scratch / local ticket files (cinder-parity, etc.) — not for version control
+.scratch/

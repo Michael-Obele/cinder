@@ -54,6 +54,13 @@ func NewService(colly domain.Scraper, chromedp domain.Scraper, rdb *redis.Client
 // cacheKeyFor builds a deterministic cache key from the URL, mode, and the
 // full scrape options so option changes never serve stale cached results.
 func cacheKeyFor(url, mode string, opts domain.ScrapeOptions) string {
+	// Normalize IncludeLinks nil -> true for stable keys; nil and true
+	// now produce the same hash so legacy callers (empty opts) hit the
+	// stored entry and old cache entries remain readable after the field addition.
+	if opts.IncludeLinks == nil {
+		t := true
+		opts.IncludeLinks = &t
+	}
 	payload := struct {
 		URL  string
 		Mode string
@@ -72,6 +79,12 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 	// Default to smart if empty
 	if mode == "" {
 		mode = "smart"
+	}
+
+	// include_links defaults to true for Firecrawl parity.
+	if opts.IncludeLinks == nil {
+		t := true
+		opts.IncludeLinks = &t
 	}
 
 	// Page actions require a real browser: force dynamic mode.
@@ -224,6 +237,25 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		if result.Summary != "" {
 			result.Summary = extract.RedactPII(result.Summary)
 		}
+	}
+
+	// 3d. Links extraction (after readability, deduped, absolute, isInternal).
+	// Scrapers already fill Links via ExtractLinks on rc.ContentHTML; this fallback
+	// covers mocks and cached paths where Links may be absent, re-deriving after
+	// readability for parity with the per-engine extraction.
+	if len(result.Links) == 0 && opts.IncludeLinks != nil && *opts.IncludeLinks && result.HTML != "" {
+		if rc, _ := ExtractMainContent(result.HTML, url); rc != nil && rc.ContentHTML != "" {
+			result.Links = ExtractLinks(rc.ContentHTML, url)
+		} else {
+			result.Links = ExtractLinks(result.HTML, url)
+		}
+		if len(result.Links) == 0 {
+			// Ensure empty is nil for omitempty, but preserve explicit false vs empty distinction
+			result.Links = nil
+		}
+	}
+	if opts.IncludeLinks != nil && !*opts.IncludeLinks {
+		result.Links = nil
 	}
 
 	// 3. Extract images if requested

@@ -92,10 +92,16 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 	}
 	applyReadabilityMetadata(metadata, rc)
 
+	var links []domain.LinkData
+	if opts.IncludeLinks == nil || *opts.IncludeLinks {
+		links = ExtractLinks(rc.ContentHTML, url)
+	}
+
 	return &domain.ScrapeResult{
 		URL:      url,
 		Markdown: markdown,
 		HTML:     htmlContent, // Optional: might want to toggle this
 		Metadata: metadata,
+		Links:    links,
 	}, nil
 }

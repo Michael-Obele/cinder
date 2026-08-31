@@ -339,11 +339,17 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	}
 	applyReadabilityMetadata(metadata, rc)
 
+	var links []domain.LinkData
+	if opts.IncludeLinks == nil || *opts.IncludeLinks {
+		links = ExtractLinks(rc.ContentHTML, url)
+	}
+
 	result := &domain.ScrapeResult{
 		URL:      url,
 		Markdown: markdown,
 		HTML:     htmlContent,
 		Metadata: metadata,
+		Links:    links,
 	}
 
 	if opts.Screenshot && len(screenshotBuf) > 0 {

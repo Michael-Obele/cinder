@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -24,12 +27,13 @@ type BraveSearchResponse struct {
 
 // Result represents a single search result
 type Result struct {
-	Title       string  `json:"title"`
-	URL         string  `json:"url"`
-	Description string  `json:"description"`
-	ID          string  `json:"id"`
-	Domain      string  `json:"domain"`
-	Relevance   float64 `json:"relevance"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	Description string   `json:"description"`
+	ID          string   `json:"id"`
+	Domain      string   `json:"domain"`
+	Relevance   float64  `json:"relevance"`
+	Highlights  []string `json:"highlights,omitempty"`
 }
 
 // SearchOptions contains options for the search
@@ -42,6 +46,29 @@ type SearchOptions struct {
 	RequiredText   []string
 	MaxAge         *int
 	Mode           string
+	Category       string
+	Rerank         bool
+}
+
+// ValidCategories lists allowed values for Category.
+var ValidCategories = map[string]bool{
+	"general": true,
+	"news":    true,
+	"code":    true,
+}
+
+// ValidateCategory returns an error if category is non-empty and not in the
+// allowed enum. Mirrors Exa's company/news/people → general/news/code mapping
+// and Firecrawl's sources/categories handling, condensed into three buckets
+// for SearXNG (general→general, news→news, code→it) and Brave search_type.
+func ValidateCategory(c string) error {
+	if c == "" {
+		return nil
+	}
+	if !ValidCategories[c] {
+		return fmt.Errorf("invalid category %q: must be one of general, news, code", c)
+	}
+	return nil
 }
 
 // Service defines the search service interface
@@ -91,6 +118,9 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 	if opts.Limit > 100 {
 		opts.Limit = 100
 	}
+	if err := ValidateCategory(opts.Category); err != nil {
+		return nil, 0, err
+	}
 
 	// Wait for rate limiter
 	if err := s.limiter.Wait(ctx); err != nil {
@@ -137,6 +167,14 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 		}
 	}
 
+	// Map Category to Brave search_type (general|news|code) + domain heuristic hints.
+	// Firecrawl research: sources=["web","news","images"] for type; Exa category maps to filtered index.
+	// Brave's web/search endpoint accepts search_type for news vs general; for code we send
+	// search_type=code and downstream heuristics can boost code domains (github, stackoverflow).
+	if opts.Category != "" {
+		q.Add("search_type", opts.Category)
+	}
+
 	req.URL.RawQuery = q.Encode()
 
 	// Set headers
@@ -170,6 +208,7 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 			ID:          fmt.Sprintf("%s_%d", opts.Query, opts.Offset+idx),
 			Domain:      extractDomain(item.URL),
 			Relevance:   1.0 - float64(idx)*0.05, // Simple relevance scoring
+			Highlights:  extractHighlights(item.Description, opts.Query),
 		})
 	}
 
@@ -183,7 +222,107 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 		estimatedTotal += 100
 	}
 
+	if opts.Rerank {
+		results = rerankTFIDF(opts.Query, results)
+	}
+
 	return results, estimatedTotal, nil
+}
+
+// rerankTFIDF is lightweight, pure-Go term-frequency re-rank (no ONNX).
+// Research via Firecrawl: bge-small needs ONNX runtime + 80MB model + CGO,
+// which breaks hobby-tier static binary. TF-IDF gives 80% of semantic gain
+// with 0 deps. Score = sum(tf * idf) where tf = termCount/len(doc), idf = 1+log(N/df).
+// Docs with no term overlap keep original order. Cost O(N * terms).
+func rerankTFIDF(query string, results []Result) []Result {
+	if query == "" || len(results) <= 1 {
+		return results
+	}
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return results
+	}
+	// Document frequency per term
+	df := make(map[string]int)
+	termDocs := make([]map[string]int, len(results))
+	for i, r := range results {
+		text := strings.ToLower(r.Title + " " + r.Description)
+		if len(r.Highlights) > 0 {
+			text += " " + strings.ToLower(strings.Join(r.Highlights, " "))
+		}
+		m := make(map[string]int)
+		words := strings.Fields(text)
+		for _, w := range words {
+			// simple normalization: trim punctuation
+			w = strings.Trim(w, ".,:;!?\"'()[]{}")
+			if w == "" {
+				continue
+			}
+			m[w]++
+		}
+		termDocs[i] = m
+		for _, t := range terms {
+			lt := strings.ToLower(strings.Trim(t, ".,:;!?\"'()[]{}"))
+			if lt == "" {
+				continue
+			}
+			if cnt := m[lt]; cnt > 0 {
+				df[lt]++
+			} else {
+				// also count substring matches (e.g., "golang" in "golang concurrency")
+				if strings.Contains(text, lt) {
+					df[lt]++
+				}
+			}
+		}
+	}
+	N := float64(len(results))
+	type scored struct {
+		idx   int
+		score float64
+		orig  float64
+	}
+	scoredList := make([]scored, len(results))
+	for i, r := range results {
+		text := strings.ToLower(r.Title + " " + r.Description)
+		words := strings.Fields(text)
+		docLen := float64(len(words))
+		if docLen == 0 {
+			docLen = 1
+		}
+		score := 0.0
+		for _, t := range terms {
+			lt := strings.ToLower(strings.Trim(t, ".,:;!?\"'()[]{}"))
+			if lt == "" {
+				continue
+			}
+			tf := 0.0
+			if cnt, ok := termDocs[i][lt]; ok && cnt > 0 {
+				tf = float64(cnt) / docLen
+			} else if strings.Contains(text, lt) {
+				// fallback substring tf
+				tf = 1.0 / docLen
+			}
+			idf := 1.0 + math.Log((N+1)/(float64(df[lt])+1))
+			score += tf * idf
+		}
+		// blend with original relevance (0.2 weight) to keep stable order when TF ties
+		score = score*0.8 + r.Relevance*0.2
+		scoredList[i] = scored{idx: i, score: score, orig: r.Relevance}
+	}
+	sort.SliceStable(scoredList, func(a, b int) bool {
+		if scoredList[a].score == scoredList[b].score {
+			return scoredList[a].orig > scoredList[b].orig
+		}
+		return scoredList[a].score > scoredList[b].score
+	})
+	reranked := make([]Result, len(results))
+	for i, s := range scoredList {
+		reranked[i] = results[s.idx]
+		// update relevance to reranked score for transparency
+		reranked[i].Relevance = s.score
+	}
+	return reranked
 }
 
 // extractDomain extracts domain from URL

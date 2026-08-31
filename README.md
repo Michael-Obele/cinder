@@ -127,9 +127,9 @@ Client → Gin Router → Scraper Service (Colly / Chromedp + Readability)
 ## API — all under `/v1`
 
 ### 1. Scrape (sync)
-`POST /v1/scrape` — fastest path for one page. Also accepts `GET /v1/scrape?url=...` for quick probes.
+`POST /v1/scrape` — fastest path for one page. Also accepts `GET /v1/scrape?url=...` for quick probes. **Sync multi-URL:** `POST /v1/scrape` with `{"urls": ["https://a.com","https://b.com"]}` (max 10, exclusive with `url`) → `{results: [{url, markdown, metadata, ...}]}` in one call — no Redis, errgroup limit 5, mirrors `web_fetch_exa` and Firecrawl `POST /v2/batch/scrape` (see https://docs.firecrawl.dev/features/scrape + https://docs.firecrawl.dev/api-reference/endpoint/scrape).
 
-**Key params:** `url` (required), `mode` (`smart`/`static`/`dynamic`), `images` + `image_format` (`url`|`blob`), `max_images`, `screenshot` + `screenshot_opts` (`width`/`height`/`full_page`/`format`/`quality`/`wait_selector`), `actions` (`wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`), `extract_schema` (CSS selector → `{selector, attr, multiple}`), `summary` + `summary_sentences`, `redact_pii`, `block_ads` (default true), `remove_base64_images` (default true). Full table: [`docs/guides/API_REFERENCE.md`](docs/guides/API_REFERENCE.md).
+**Key params:** `url` (required unless `urls` provided), `urls` (max 10, sync batch — exclusive with `url`), `mode` (`smart`/`static`/`dynamic`), `images` + `image_format` (`url`|`blob`), `max_images`, `screenshot` + `screenshot_opts` (`width`/`height`/`full_page`/`format`/`quality`/`wait_selector`), `actions` (`wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`), `extract_schema` (CSS selector → `{selector, attr, multiple}`), `summary` + `summary_sentences`, `redact_pii`, `block_ads` (default true), `remove_base64_images` (default true), `include_links` (default true — `links: [{url, text, isInternal}]` after readability, like Firecrawl `formats: ["links"]`). Full table: [`docs/guides/API_REFERENCE.md`](docs/guides/API_REFERENCE.md).
 
 ```bash
 curl -X POST http://localhost:8080/v1/scrape \
@@ -144,6 +144,12 @@ curl -X POST http://localhost:8080/v1/scrape \
       "links": {"selector": "a", "attr": "href", "multiple": true}
     }
   }'
+
+# Sync multi-URL (up to 10, parallel limit 5, same params applied to each URL):
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["https://example.com","https://example.org"], "mode":"smart"}'
+# → {"results": [{"url":"https://example.com","markdown":"...","metadata":{...}}, ...]}
 ```
 
 ### 2. Crawl (async)
@@ -151,8 +157,8 @@ curl -X POST http://localhost:8080/v1/scrape \
 
 Params: `maxDepth` (1–10, default 2), `limit` (1–100, default 10), `include_paths`/`exclude_paths` globs (exclusion wins), `webhook_url` + `webhook_secret` (HMAC `X-Cinder-Signature`), `render`/`screenshot`/`images`. Parallel pool `CRAWL_CONCURRENCY=4` (cap 10), 1s politeness, 2 retries for 5xx (4xx never retried). **Requires `REDIS_URL`.**
 
-### 3. Search (SearXNG, cached)
-`POST /v1/search` — needs `SEARXNG_ENDPOINT=http://localhost:8889` (Docker: `searxng:8080`) or `BRAVE_SEARCH_API_KEY` as fallback. Repeat queries hit Redis cache (~2ms). Filters: `includeDomains`, `excludeDomains`, `requiredText`, `maxAge` (1/7/30d), `limit`/`offset`.
+### 3. Search (SearXNG, cached) — highlights + category + rerank
+`POST /v1/search` — needs `SEARXNG_ENDPOINT=http://localhost:8889` (Docker: `searxng:8080`) or `BRAVE_SEARCH_API_KEY` as fallback. Repeat queries hit Redis cache (~2ms). Returns `highlights: ["…query window…"]` per result (120-char) + `relevance` reranked. Filters: `includeDomains`, `excludeDomains`, `requiredText`, `maxAge` (1/7/30d), `category` (`general`/`news`/`code`), `rerank` (`true` → TF-IDF pure Go), `limit`/`offset`. `GET /v1/search?query=...&category=news&rerank=true` works too.
 
 ```bash
 curl -X POST http://localhost:8080/v1/search \
@@ -176,7 +182,7 @@ Set `APP_API_KEYS=sk_a,sk_b` → `X-API-Key: sk_a` required on `/v1/*` (else 401
 
 ## MCP — use Cinder from your AI assistant
 
-Cinder ships a Model Context Protocol server ([`cinder-tmcp`](https://github.com/Michael-Obele/cinder-tmcp)) so Claude, Cursor, or any MCP client can scrape, crawl, and search without leaving the chat.
+Cinder ships a Model Context Protocol server ([`cinder-tmcp`](https://github.com/Michael-Obele/cinder-tmcp) — built with [TMCP](https://github.com/paoloricciuti/tmcp) / [tmcp.io](https://tmcp.io)) so Claude, Cursor, or any MCP client can scrape, crawl, and search without leaving the chat.
 
 ### Run the MCP server with Docker (self-hosted, no paid API)
 
@@ -262,8 +268,13 @@ Sidecar SearXNG on Fly? Same app, second Machine via [`scripts/fly-searxng.sh`](
 | **Image engine v2** (srcset/picture/lazy, ranked, dimension-sniffed) | Hero, not avatar → better vision RAG |
 | **Page actions** | Click/scroll before capture → lazy content loads |
 | **Deterministic extract** (`extract_schema`) + summary + PII redact | No LLM cost → structured data safely |
+| **Links extraction** (`links: [{url, text, isInternal}]` after readability, deduped) | Firecrawl `formats: ["links"]` parity — `include_links` (default true) |
+| **Sync multi-URL scrape** (`urls: []` max 10, errgroup limit 5) | One call like `web_fetch_exa` / Firecrawl `batch/scrape` → `{results: [{url, markdown, metadata}]}` — no Redis |
+| **Search highlights** (`highlights: ["…query window…"]`) | Firecrawl `highlights:true` parity — 120-char query-biased snippet per result, always returned |
+| **Category filters** (`category: general\|news\|code`) | Exa `category` parity → SearXNG `categories` + Brave `search_type`, cache-aware |
+| **TF-IDF rerank** (`?rerank=true`) | Lightweight pure-Go re-rank (no ONNX) — `tf*idf*0.8 + original*0.2`, `bge-small` alternative without hobby-tier penalty |
 | **Map / Search / Batch / Monitor** | Discover → scrape → watch → webhook → done |
-| **MCP server** (`cinder-tmcp`) | Scrape/search/crawl from Claude/Cursor/Zed — no REST glue |
+| **MCP server** (`cinder-tmcp` — [TMCP](https://github.com/paoloricciuti/tmcp) / [tmcp.io](https://tmcp.io)) | 8 tools: `cinder_scrape`/`crawl`/`crawl_status`/`search`/`monitor`/`map`/`batch_scrape`/`links` — no REST glue |
 
 ---
 
@@ -334,7 +345,7 @@ Full walkthrough: [`docs/guides/ARCHITECTURE.md`](docs/guides/ARCHITECTURE.md) �
 | MCP server (`cinder-tmcp`) — scrape/search/crawl/monitor as AI tools | ✅ |
 | Next: stealth tier (`utls` + CDP stealth), PDF/non-HTML, `pprof` benchmarks, Smart Wait heuristics |  |
 
-Parity gaps tracked honestly in [`docs/EXA_PARITY.md`](docs/EXA_PARITY.md) (semantic vector search, highlights).
+Parity gaps tracked honestly in [`docs/EXA_PARITY.md`](docs/EXA_PARITY.md) — **closed:** highlights, category, TF-IDF rerank, multi-URL sync, links, MCP map/batch; **remaining:** full vector semantic search (TF-IDF is lightweight lite).
 
 ---
 
