@@ -5,9 +5,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![Status](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/Michael-Obele/cinder)
 
-**Turn any website into LLM-ready markdown — self-hosted, one binary, runs on a $5/mo hobby box.** Drop-in, open-source Firecrawl alternative in Go. No per-request browser spawn. No per-token bill.
-
-> One process. ~200ms static, 1–3s dynamic. `fly deploy` in minutes. Redis only for async.
+**Turn any website into LLM-ready markdown in 200ms — self-hosted, one binary, $5/mo.** The Firecrawl you host yourself. One shared Chrome, SearXNG search at 560 req/s — no per-request spawn, no per-token bill. `fly deploy` in minutes, Redis only for async.
 
 ---
 
@@ -225,15 +223,11 @@ Point your MCP client at `http://localhost:3000/mcp` (Streamable HTTP) or `http:
 
 ### Available MCP tools
 
-| Tool | What it does |
-|---|---|
-| `cinder_scrape` | Scrape one URL → clean markdown, optional screenshot/images/summary/schema extraction |
-| `cinder_crawl` | Async BFS crawl → task ID |
-| `cinder_crawl_status` | Poll crawl job (pending → active → completed/failed) |
-| `cinder_search` | Web search via SearXNG/Brave, domain filters, pagination |
-| `cinder_monitor` | `create` / `status` / `delete` change-tracking monitors |
+Resource-oriented tools with `action` multiplexing — fewer, better-arranged than one-tool-per-endpoint. See **[`cinder-tmcp` README](https://github.com/Michael-Obele/cinder-tmcp#readme)** for the current tool list, schemas, and examples (tools evolve — that repo is the source of truth).
 
-Full docs: [`cinder-tmcp/README.md`](https://github.com/Michael-Obele/cinder-tmcp#readme) · Live docs at `http://localhost:3000/health`.
+> `cinder_extract` (scrape/links/batch) · `cinder_discover` (search/map/crawl) · `cinder_monitor` (create/status/delete) — check the linked README for exact `action` values and params.
+
+Live docs at `http://localhost:3000/health`.
 
 > **Firecrawl users:** if you also use Firecrawl self-hosted, its MCP is a separate package (`firecrawl-mcp`). Point it at your local Firecrawl with `FIRECRAWL_API_URL=http://localhost:3002` — don't use the hosted `https://mcp.firecrawl.dev/...` URL when running Docker. See [firecrawl-mcp-server](https://github.com/firecrawl/firecrawl-mcp-server#configuration) for the `FIRECRAWL_API_URL` env.
 
@@ -274,7 +268,7 @@ Sidecar SearXNG on Fly? Same app, second Machine via [`scripts/fly-searxng.sh`](
 | **Category filters** (`category: general\|news\|code`) | Exa `category` parity → SearXNG `categories` + Brave `search_type`, cache-aware |
 | **TF-IDF rerank** (`?rerank=true`) | Lightweight pure-Go re-rank (no ONNX) — `tf*idf*0.8 + original*0.2`, `bge-small` alternative without hobby-tier penalty |
 | **Map / Search / Batch / Monitor** | Discover → scrape → watch → webhook → done |
-| **MCP server** (`cinder-tmcp` — [TMCP](https://github.com/paoloricciuti/tmcp) / [tmcp.io](https://tmcp.io)) | 8 tools: `cinder_scrape`/`crawl`/`crawl_status`/`search`/`monitor`/`map`/`batch_scrape`/`links` — no REST glue |
+| **MCP server** (`cinder-tmcp` — [TMCP](https://github.com/paoloricciuti/tmcp) / [tmcp.io](https://tmcp.io)) | Resource-oriented MCP — see [`cinder-tmcp` README](https://github.com/Michael-Obele/cinder-tmcp#readme) for current tools (extract/discover/monitor with `action` multiplexing) — no REST glue |
 
 ---
 
