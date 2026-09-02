@@ -1,0 +1,81 @@
+# Render Blueprint — Cinder on Free Tier
+# Deploy via Dashboard → New → Blueprint → connect repo, or `render blueprint apply`
+# Docs: https://docs.render.com/blueprint-spec
+# Free tier notes: https://docs.render.com/free
+# - Web service sleeps after 15 min idle (~60s cold start), 750 hrs/mo, ephemeral FS, no disk/scaling
+# - Key Value (Valkey) free is single instance; use starter+ if you need persistence beyond trial
+# - Keep CHROME_RECYCLE_AFTER low on 512 MB to bound Chromium leaks
+# Validated against SchemaStore: https://www.schemastore.org/schemas/json/render.json
+
+services:
+  # ── Cinder API (Go + Chromium, monolith with embedded Asynq worker) ──────────
+  - type: web
+    name: cinder
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt # closest to Fly's lhr; change if needed: oregon, singapore, etc.
+    healthCheckPath: /health
+    autoDeploy: false # push → manual deploy; set true for auto
+    envVars:
+      - key: SERVER_PORT
+        value: 10000 # Render injects PORT=10000; Cinder reads SERVER_PORT, so we pin it
+      - key: PORT
+        value: 10000 # keep both in sync for any PORT-aware tooling
+      - key: SERVER_MODE
+        value: release
+      - key: LOG_LEVEL
+        value: info
+      - key: APP_LOGLEVEL
+        value: info
+      # Browser memory bound — 512 MB free needs more frequent recycle than default 100
+      - key: CHROME_RECYCLE_AFTER
+        value: 50
+      - key: CRAWL_CONCURRENCY
+        value: 2 # free = 512 MB, keep crawl light
+      - key: CRAWL_DOMAIN_DELAY
+        value: 1s
+      - key: SHUTDOWN_TIMEOUT
+        value: 20
+      # Redis / search wiring — internal hostnames rendered via fromService
+      - key: REDIS_URL
+        fromService:
+          name: cinder-redis
+          type: keyvalue
+          property: connectionString # internal redis://… URL
+      - key: SEARXNG_ENDPOINT
+        value: "" # free tier has no sidecar SearXNG — set to a hosted SearXNG or use Brave fallback
+      - key: BRAVE_SEARCH_API_KEY
+        sync: false # prompted once on blueprint create; add manually afterwards
+      - key: APP_API_KEYS
+        sync: false # comma-separated sk_… ; leave empty for open access
+      - key: APP_RATE_LIMIT_RPM
+        value: 60
+
+  # ── Redis / Valkey (Asynq queue, crawl/batch/monitor, search cache) ─────────
+  - type: keyvalue
+    name: cinder-redis
+    plan: free
+    region: frankfurt # MUST match web service region for private networking
+    maxmemoryPolicy: allkeys-lru # good for cache + queue mix
+    ipAllowList: [] # private only; no public access
+
+  # ── Optional SearXNG (uncomment if you want self-hosted search on Render) ──
+  # SearXNG is ~150 MB idle. On free tier you get only one free web service,
+  # so enabling this means you need a paid plan for the second service.
+  # Cheaper free-tier alternative: use BRAVE_SEARCH_API_KEY instead.
+  # - type: web
+  #   name: cinder-searxng
+  #   runtime: image
+  #   image:
+  #     url: searxng/searxng:latest
+  #   plan: free
+  #   region: frankfurt
+  #   healthCheckPath: /healthz
+  #   envVars:
+  #     - key: SEARXNG_SETTINGS_PATH
+  #       value: /etc/searxng/settings.yml
+  # Then set Cinder's SEARXNG_ENDPOINT to:
+  #   https://cinder-searxng.onrender.com  (external) or
+  #   http://cinder-searxng:8080           (internal, same region)

@@ -245,6 +245,22 @@ fly deploy
 
 Sidecar SearXNG on Fly? Same app, second Machine via [`scripts/fly-searxng.sh`](scripts/fly-searxng.sh) + [`docs/guides/SEARXNG_FLY.md`](docs/guides/SEARXNG_FLY.md) (Option A).
 
+**Render (free tier):** 512 MB, sleeps after 15 min idle (~60 s cold start), 750 hrs/mo — perfect for hobby.
+
+```bash
+# Option 1 — Blueprint (recommended)
+# Connect your fork in Render Dashboard → New → Blueprint → select this repo
+# Render reads render.yaml → creates cinder (Docker) + cinder-redis (Key Value)
+# Set BRAVE_SEARCH_API_KEY / APP_API_KEYS when prompted (sync: false), then Deploy
+
+# Option 2 — Manual: New → Web Service → Docker, point at Dockerfile, plan: Free
+# Add Key Value cinder-redis (same region: frankfurt) → wire REDIS_URL from it
+```
+
+`render.yaml` pins `CHROME_RECYCLE_AFTER=50` and `CRAWL_CONCURRENCY=2` for 512 MB, `healthCheckPath: /health`, and `PORT=10000` (Render injects `PORT`; Cinder now reads `PORT` as fallback for `SERVER_PORT`). No `SEARXNG_ENDPOINT` on free — use `BRAVE_SEARCH_API_KEY` or uncomment the `cinder-searxng` service (requires a second service → paid).
+
+> Free notes: ephemeral FS (no disk), single instance/no scaling, Key Value is Valkey 8 with `allkeys-lru`, spins down on idle. See https://docs.render.com/free and https://docs.render.com/blueprint-spec.
+
 - **Railway:** `SERVER_MODE=release`, 512MB hobby works.
 - **Leapcell:** 4GB pay-per-minute, ~$5–15/mo.
 - **Any Docker host:** Redis is the only external dep — and only for queue/batch/monitor. `docker compose up -d` is the whole deploy.
