@@ -22,11 +22,11 @@ func TestNewHybridServiceWithStealthChain(t *testing.T) {
 	if _, ok := h.services[0].(*SearXNGService); !ok {
 		t.Errorf("first should be SearXNG, got %T", h.services[0])
 	}
-	if _, ok := h.services[1].(*BraveService); !ok {
-		t.Errorf("second should be Brave, got %T", h.services[1])
+	if _, ok := h.services[1].(*StealthService); !ok {
+		t.Errorf("second should be Stealth (free fallback before metered Brave), got %T", h.services[1])
 	}
-	if _, ok := h.services[2].(*StealthService); !ok {
-		t.Errorf("third should be Stealth, got %T", h.services[2])
+	if _, ok := h.services[2].(*BraveService); !ok {
+		t.Errorf("third should be Brave (metered last resort), got %T", h.services[2])
 	}
 }
 

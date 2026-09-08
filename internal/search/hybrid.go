@@ -10,9 +10,9 @@ import (
 
 // HybridService tries a chain of search backends in order and returns the
 // first non-empty result set. Backends are ordered cheap-to-robust:
-// SearXNG (self-hosted, free) → Brave API (1 QPS, ~2000/mo free) →
-// Stealth (browser-rendered Brave HTML via shared Chromedp allocator, most
-// robust but most expensive). A backend that errors or returns nothing falls
+// SearXNG (self-hosted, free) → Stealth (browser-rendered Brave HTML via
+// shared Chromedp allocator, free but CPU) → Brave API (1 QPS, ~2000/mo
+// free, metered last resort). A backend that errors or returns nothing falls
 // through to the next, so a single engine outage never kills search.
 type HybridService struct {
 	services []Service
@@ -51,27 +51,33 @@ func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 }
 
 // NewHybridServiceWithStealth builds the full 3-backend search chain
-// SearXNG → Brave → Stealth (cheap → robust).
+// SearXNG → Stealth → Brave API (cheap → free fallback → metered last resort).
 //
 // Ordering is intentional: SearXNG is cheapest (self-hosted, no per-query
-// cost, aggregates many engines), Brave API is metered but reliable, and
-// Stealth is the most robust fallback (browser-rendered HTML via the shared
-// ChromedpScraper allocator) but also the most expensive in CPU/memory. The
-// chain falls through on error or empty results, so a SearXNG 429/captcha or
-// Brave 429 still yields results via Stealth.
+// cost, aggregates many engines), Stealth is free but CPU-heavy
+// (browser-rendered Brave HTML via shared ChromedpScraper), and Brave API
+// is metered (1 QPS, ~2000/mo) so it is last to conserve quota. The chain
+// falls through on error or empty results, so a SearXNG 429/captcha tries
+// Stealth before spending Brave API quota.
 //
-//   - braveAPIKey: optional Brave Search API key.
+//   - braveAPIKey: optional Brave Search API key (last resort).
 //   - searxngEndpoint: optional self-hosted SearXNG base URL.
 //   - fetcher: optional BrowserFetcher (typically *scraper.ChromedpScraper).
 //     When nil, stealth is disabled and the chain is SearXNG → Brave only.
-//     When non-nil, a StealthService is appended as the 3rd backend.
+//     When non-nil, Stealth is inserted before Brave API.
 //
 // When no backends are configured, a Service is returned that fails with a
 // clear configuration error.
 func NewHybridServiceWithStealth(braveAPIKey, searxngEndpoint string, fetcher BrowserFetcher) Service {
-	chain := buildHybridChain(braveAPIKey, searxngEndpoint)
+	var chain []Service
+	if searxngEndpoint != "" {
+		chain = append(chain, NewSearXNGService(searxngEndpoint))
+	}
 	if fetcher != nil {
 		chain = append(chain, NewStealthService(fetcher, ""))
+	}
+	if braveAPIKey != "" {
+		chain = append(chain, NewBraveService(braveAPIKey))
 	}
 
 	switch len(chain) {
