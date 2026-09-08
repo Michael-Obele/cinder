@@ -29,6 +29,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - SERVER_MODE=release
       - SEARXNG_ENDPOINT=http://searxng:8080
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
+      - STEALTH_ENABLED=true
     depends_on:
       redis:
         condition: service_healthy
