@@ -4,4 +4,14 @@ link_token = false
 
 [botdetection]
 # SearXNG logs: missing limiter.toml + X-Forwarded-For nor X-Real-IP
-# This file silences the warning; actual limiting disabled via settings.yml limiter:false
+# Actual limiting disabled via settings.yml limiter:false — this file
+# silences the warning and fixes real-IP detection behind Docker.
+# Docker bridge 172.18.0.3 (api) → searxng appears as proxy; trust it
+# via CIDR so SearXNG uses X-Forwarded-For for client IP. CIDR survives
+# PC restart / DHCP / network change — no per-IP edit needed.
+trusted_proxies = ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
+
+[real_ip]
+# x_for = 1 if Cinder → SearXNG direct, 2 if double proxy
+# (see searxng/issues/3191, #4505). Cinder is direct HTTP, so 1.
+x_for = 1
