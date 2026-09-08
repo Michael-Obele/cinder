@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,16 +55,35 @@ func NewChromedpScraperWithLimit(recycleAfter int) *ChromedpScraper {
 	return s
 }
 
-// buildAllocator constructs a fresh Chrome exec allocator with the flags
-// required for headless container operation.
+// capturedFlags holds the flag names from the last buildAllocator call,
+// exposed for testing via capturedAllocatorFlags and stealthFlagsContain.
+var capturedFlags []string
+
+// capturedAllocatorFlags returns the flag names from the last allocator build.
+func capturedAllocatorFlags() []string { return capturedFlags }
+
+// buildAllocator constructs a fresh Chrome exec allocator with stealth flags.
 func buildAllocator() (context.Context, context.CancelFunc) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true), // Critical for Docker
-		chromedp.UserAgent("Mozilla/5.0 (compatible; CinderBot/1.0; +http://github.com/standard-user/cinder)"),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.Flag("disable-infobars", true),
+		chromedp.Flag("excludeSwitches", "enable-automation"),
+		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"),
 	)
+
+	capturedFlags = []string{
+		"headless",
+		"disable-gpu",
+		"no-sandbox",
+		"disable-dev-shm-usage",
+		"disable-blink-features",
+		"disable-infobars",
+		"excludeSwitches",
+	}
 
 	// Respect CHROME_BIN env var if set (Dockerfile sets it)
 	if chromeBin := os.Getenv("CHROME_BIN"); chromeBin != "" {
@@ -78,12 +98,11 @@ func buildAllocator() (context.Context, context.CancelFunc) {
 	return chromedp.NewExecAllocator(context.Background(), opts...)
 }
 
-// stealthFlagsContain reports whether the allocator flags contain the given
-// substring. Task 1 stub — will be replaced in Task 2 with real stealth flag
-// checks. Always returns false so red tests (chromedp_stealth_test.go) stay
-// failing while allowing the package to compile and `go vet`/`staticcheck`
-// to pass — intentional TDD scaffolding, not a logic change.
-func stealthFlagsContain(flag string) bool { return false }
+// stealthFlagsContain reports whether the allocator flags contain the given substring.
+func stealthFlagsContain(flag string) bool {
+	joined := strings.Join(capturedAllocatorFlags(), ",")
+	return strings.Contains(joined, flag)
+}
 
 // warmUp starts the browser synchronously so failures surface at startup.
 func warmUp(allocCtx context.Context) {
@@ -124,6 +143,63 @@ func (s *ChromedpScraper) recycleLocked() {
 	s.allocCtx, s.cancel = s.newAllocator()
 	s.scrapeCount = 0
 	logger.Log.Info("Chrome allocator recycled to bound memory growth")
+}
+
+// FetchHTML fetches the HTML for the given URL in a lightweight tab, with
+// per-request User-Agent rotation and stealth allocator flags. It validates
+// the URL via safeurl.Check, respects context cancellation and deadline
+// (30s default or caller's deadline), and uses chromedp.Navigate +
+// WaitVisible("body") + OuterHTML("html") to retrieve the rendered HTML.
+func (s *ChromedpScraper) FetchHTML(ctx context.Context, url string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := safeurl.Check(ctx, url); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	tabCtx, cancel := chromedp.NewContext(s.beginScrape())
+	defer cancel()
+
+	timeout := 30 * time.Second
+	if dl, ok := ctx.Deadline(); ok {
+		timeout = time.Until(dl)
+		if timeout <= 0 {
+			return "", ctx.Err()
+		}
+	}
+
+	tabCtx, cancelTimeout := context.WithTimeout(tabCtx, timeout)
+	defer cancelTimeout()
+
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancelTimeout()
+		case <-done:
+		}
+	}()
+
+	ua := gofakeit.UserAgent()
+	var html string
+	err := chromedp.Run(tabCtx,
+		emulation.SetUserAgentOverride(ua),
+		chromedp.Navigate(url),
+		chromedp.WaitVisible("body", chromedp.ByQuery),
+		chromedp.OuterHTML("html", &html, chromedp.ByQuery),
+	)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", fmt.Errorf("fetch html: %w", err)
+	}
+	return html, nil
 }
 
 // maxScrollSettleIterations bounds the scroll_to_bottom settle loop.
