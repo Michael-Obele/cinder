@@ -2,31 +2,30 @@ package search
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/brianvoe/gofakeit/v6"
 )
 
 // BrowserFetcher fetches HTML for a URL in a stealth browser tab.
-// TODO(Task 3): This interface lives in search but will be implemented by
-// scraper.ChromedpScraper — cross-package import would create a cycle.
-// Task 3 should move the interface to internal/domain or inject via func
-// to avoid circular dependency; for now the stub keeps the package compiling.
-// In production scraper.ChromedpScraper will satisfy this; tests use a stub.
+// ChromedpScraper implements this; tests use a stub.
 type BrowserFetcher interface {
 	FetchHTML(ctx context.Context, url string) (string, error)
 }
 
-// StealthService is a Task 1 stub — will be replaced in Task 3 with full
-// Brave HTML parsing and UA rotation. It exists only so the package compiles
-// and `go test -run TestNewHybridService` / `go vet` / `staticcheck` pass
-// while red tests (stealth_test.go) remain failing as TDD scaffolding.
+// StealthService scrapes Brave Search HTML as a fallback when APIs are
+// unavailable. It implements search.Service and is intended as the last
+// backend in the HybridService chain (SearXNG → Brave API → Stealth).
 type StealthService struct {
 	fetcher  BrowserFetcher
 	endpoint string
-	// TODO(Task 3): client is unused in Task 1 stub (Search returns empty);
-	// real HTTP fetch in Task 3 will use it for Brave HTML retrieval.
-	client *http.Client
+	client   *http.Client
 }
 
 // NewStealthService creates a StealthService. Endpoint defaults to
@@ -42,8 +41,96 @@ func NewStealthService(fetcher BrowserFetcher, endpoint string) *StealthService 
 	}
 }
 
-// Search is a Task 1 stub — will be replaced in Task 3. Always returns empty
-// results so red tests stay failing while the package compiles.
-func (s *StealthService) Search(_ context.Context, _ SearchOptions) ([]Result, int, error) {
-	return nil, 0, nil
+// Search performs a Brave Search HTML scrape. It validates category, builds
+// the Brave Search URL, fetches HTML via the BrowserFetcher (or plain HTTP
+// fallback when fetcher is nil), and parses results with goquery.
+func (s *StealthService) Search(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
+	if err := ValidateCategory(opts.Category); err != nil {
+		return nil, 0, err
+	}
+	if opts.Limit == 0 {
+		opts.Limit = 10
+	}
+
+	u, _ := url.Parse(s.endpoint + "/search")
+	q := u.Query()
+	q.Set("q", opts.Query)
+	if opts.Offset > 0 {
+		q.Set("offset", fmt.Sprintf("%d", opts.Offset))
+	}
+	u.RawQuery = q.Encode()
+
+	var html string
+	var err error
+	if s.fetcher != nil {
+		html, err = s.fetcher.FetchHTML(ctx, u.String())
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		req.Header.Set("User-Agent", gofakeit.UserAgent())
+		req.Header.Set("Accept", "text/html,application/xhtml+xml")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		resp, err2 := s.client.Do(req)
+		if err2 != nil {
+			return nil, 0, fmt.Errorf("stealth request: %w", err2)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, 0, fmt.Errorf("stealth status %d", resp.StatusCode)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		html = string(b)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return nil, 0, fmt.Errorf("stealth parse: %w", err)
+	}
+
+	var results []Result
+	doc.Find("div[data-type='web'] a[href]").Each(func(i int, sel *goquery.Selection) {
+		if len(results) >= opts.Limit {
+			return
+		}
+		href, _ := sel.Attr("href")
+		title := strings.TrimSpace(sel.Text())
+		if href == "" || title == "" {
+			return
+		}
+		results = append(results, Result{
+			Title:       title,
+			URL:         href,
+			Description: "",
+			Domain:      extractDomain(href),
+			Relevance:   0.5 - float64(i)*0.05,
+			ID:          fmt.Sprintf("%s_%d", opts.Query, opts.Offset+i),
+		})
+	})
+
+	if len(results) == 0 {
+		doc.Find("a[href^='http']").Each(func(i int, sel *goquery.Selection) {
+			if len(results) >= opts.Limit {
+				return
+			}
+			href, _ := sel.Attr("href")
+			title := strings.TrimSpace(sel.Text())
+			if href == "" || title == "" || len(title) < 5 {
+				return
+			}
+			if strings.Contains(href, "brave.com") {
+				return
+			}
+			results = append(results, Result{
+				Title:     title,
+				URL:       href,
+				Domain:    extractDomain(href),
+				Relevance: 0.5,
+				ID:        fmt.Sprintf("%s_%d", opts.Query, opts.Offset+i),
+			})
+		})
+	}
+
+	return results, len(results), nil
 }
