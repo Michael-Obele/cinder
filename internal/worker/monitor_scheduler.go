@@ -41,7 +41,13 @@ func (k *RedisKV) Del(ctx context.Context, key string) error {
 // StartMonitorScheduler runs a background loop that enqueues monitor:check
 // tasks when a monitor's NextCheck time arrives. Blocking; run in a
 // goroutine. Stopped via ctx cancellation.
-func StartMonitorScheduler(ctx context.Context, kv KV, enq Enqueuer, scraper *scraper.Service, logger *slog.Logger) {
+func StartMonitorScheduler(
+	ctx context.Context,
+	kv KV,
+	enq Enqueuer,
+	scraper *scraper.Service,
+	logger *slog.Logger,
+) {
 	handler := NewMonitorTaskHandler(scraper, kv, logger)
 	_ = handler // scheduler only enqueues; handler runs in the worker mux
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -73,7 +74,7 @@ func (s *SearXNGService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 	q.Set("format", "json")
 	if opts.Offset > 0 {
 		// SearXNG paginates by page number; approximate offset as pageno.
-		q.Set("pageno", fmt.Sprintf("%d", opts.Offset/opts.Limit+1))
+		q.Set("pageno", strconv.Itoa(opts.Offset/opts.Limit+1))
 	}
 	if opts.MaxAge != nil {
 		switch *opts.MaxAge {
@@ -183,7 +184,7 @@ func extractHighlights(description, query string) []string {
 	}
 	lowerDesc := strings.ToLower(description)
 	bestIdx := -1
-	bestTerm := ""
+	var bestTerm string
 	for _, t := range terms {
 		lt := strings.ToLower(t)
 		if idx := strings.Index(lowerDesc, lt); idx != -1 {

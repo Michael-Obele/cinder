@@ -236,7 +236,7 @@ func buildActionSteps(a domain.Action) ([]chromedp.Action, error) {
 		// Scroll with a settle loop so lazy-loaded content has time to
 		// render before capture.
 		return []chromedp.Action{chromedp.ActionFunc(func(ctx context.Context) error {
-			for i := 0; i < maxScrollSettleIterations; i++ {
+			for range maxScrollSettleIterations {
 				var scrollY, scrollHeight int
 				if err := chromedp.Evaluate(`window.scrollY`, &scrollY).Do(ctx); err != nil {
 					return err
@@ -337,7 +337,7 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	defer cancelTimeout()
 
 	var htmlContent string
-	var screenshotBuf []byte
+	screenshotBuf := []byte{}
 
 	logger.Log.Info("Chromedp Scraping", "url", url, "screenshot", opts.Screenshot)
 
@@ -354,7 +354,7 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	// Page actions (wait/click/scroll) run before HTML capture so
 	// interaction-driven content is included.
 	if len(opts.Actions) > 0 {
-		var steps []chromedp.Action
+		steps := []chromedp.Action{}
 		for i, a := range opts.Actions {
 			as, err := buildActionSteps(a)
 			if err != nil {
@@ -428,7 +428,7 @@ func (s *ChromedpScraper) Scrape(ctx context.Context, url string, opts domain.Sc
 	}
 	applyReadabilityMetadata(metadata, rc)
 
-	var links []domain.LinkData
+	links := []domain.LinkData{}
 	if opts.IncludeLinks == nil || *opts.IncludeLinks {
 		links = ExtractLinks(rc.ContentHTML, url)
 	}

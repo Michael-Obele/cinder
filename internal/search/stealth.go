@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,7 +61,7 @@ func (s *StealthService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 	q := u.Query()
 	q.Set("q", opts.Query)
 	if opts.Offset > 0 {
-		q.Set("offset", fmt.Sprintf("%d", opts.Offset))
+		q.Set("offset", strconv.Itoa(opts.Offset))
 	}
 	u.RawQuery = q.Encode()
 
@@ -102,7 +103,7 @@ func (s *StealthService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 		return nil, 0, fmt.Errorf("stealth parse: %w", err)
 	}
 
-	var results []Result
+	results := make([]Result, 0, opts.Limit)
 	doc.Find("div[data-type='web'] a[href]").Each(func(i int, sel *goquery.Selection) {
 		if len(results) >= opts.Limit {
 			return

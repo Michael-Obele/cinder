@@ -3,6 +3,7 @@ package scraper
 import (
 	"bytes"
 	"context"
+	"fmt"
 	stdimg "image"
 	"image/color"
 	"image/png"
@@ -180,7 +181,7 @@ func pngBytes(t *testing.T, w, h int) []byte {
 func TestScrape_MaxImagesDefault(t *testing.T) {
 	var markup strings.Builder
 	for i := 0; i < 25; i++ {
-		markup.WriteString(`<img src="https://cdn.example.com/` + string(rune('a'+i)) + `.png" alt="x">`)
+		markup.WriteString(fmt.Sprintf(`<img src="https://cdn.example.com/%c.png" alt="x">`, 'a'+i))
 	}
 	html := enrichHTML(markup.String())
 

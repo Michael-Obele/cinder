@@ -46,7 +46,7 @@ func Discover(ctx context.Context, seedURL string, maxURLs int) ([]DiscoveredURL
 	}
 
 	// 1. robots.txt → Sitemap: lines (with /sitemap.xml default fallback).
-	var sitemapURLs []string
+	sitemapURLs := []string{}
 	if robots, err := fetch(ctx, resolve(base, "/robots.txt")); err == nil {
 		sitemapURLs = parseRobotsSitemaps(robots)
 	}
@@ -55,7 +55,7 @@ func Discover(ctx context.Context, seedURL string, maxURLs int) ([]DiscoveredURL
 		sitemapURLs = []string{resolve(base, "/sitemap.xml")}
 	}
 
-	var found []DiscoveredURL
+	found := []DiscoveredURL{}
 	seen := make(map[string]bool)
 	for _, sm := range sitemapURLs {
 		if len(found) >= maxURLs {
@@ -113,7 +113,7 @@ func crawlSitemap(ctx context.Context, sitemapURL string, depth, max int) []stri
 
 	// Sitemap index → recurse into children.
 	if len(index.Sitemaps) > 0 {
-		var out []string
+		out := []string{}
 		for _, sm := range index.Sitemaps {
 			if len(out) >= max {
 				break
@@ -123,7 +123,7 @@ func crawlSitemap(ctx context.Context, sitemapURL string, depth, max int) []stri
 		return out
 	}
 
-	var out []string
+	out := []string{}
 	for _, u := range index.URLs {
 		if len(out) >= max {
 			break
@@ -138,7 +138,7 @@ func crawlSitemap(ctx context.Context, sitemapURL string, depth, max int) []stri
 
 // parseRobotsSitemaps extracts Sitemap: lines from robots.txt content.
 func parseRobotsSitemaps(robots []byte) []string {
-	var out []string
+	out := []string{}
 	for _, line := range strings.Split(string(robots), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToLower(line), "sitemap:") {
@@ -168,7 +168,7 @@ func discoverLinks(ctx context.Context, pageURL string) []string {
 		return nil
 	}
 
-	var out []string
+	out := []string{}
 	seen := make(map[string]bool)
 	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		href, exists := s.Attr("href")

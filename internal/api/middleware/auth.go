@@ -52,7 +52,11 @@ type redisLimiter struct {
 }
 
 func (l *redisLimiter) Allow(key string) bool {
-	ctx := context.Background()
+	return l.AllowWithContext(context.Background(), key)
+}
+
+// AllowWithContext is context-aware; callers with a request context should use it.
+func (l *redisLimiter) AllowWithContext(ctx context.Context, key string) bool {
 	n, err := l.client.Incr(ctx, clientBucketKey(key)).Result()
 	if err != nil {
 		return true // fail open on Redis errors; availability over strictness
@@ -90,11 +94,20 @@ func RateLimit(rpm int, redisClient *redis.Client) gin.HandlerFunc {
 		return func(c *gin.Context) { c.Next() }
 	}
 
+	type allowerWithContext interface {
+		Allow(string) bool
+		AllowWithContext(context.Context, string) bool
+	}
+
 	var lim interface{ Allow(string) bool }
+	var limCtx allowerWithContext
 	if redisClient != nil {
-		lim = &redisLimiter{client: redisClient, rpm: int64(rpm)}
+		rl := &redisLimiter{client: redisClient, rpm: int64(rpm)}
+		lim = rl
+		limCtx = rl
 	} else {
-		lim = &memLimiter{rpm: int64(rpm)}
+		m := &memLimiter{rpm: int64(rpm)}
+		lim = m
 	}
 
 	return func(c *gin.Context) {
@@ -102,7 +115,13 @@ func RateLimit(rpm int, redisClient *redis.Client) gin.HandlerFunc {
 		if key := c.GetHeader(APIKeyHeader); key != "" {
 			client = key
 		}
-		if !lim.Allow(client) {
+		allowed := false
+		if limCtx != nil {
+			allowed = limCtx.AllowWithContext(c.Request.Context(), client)
+		} else {
+			allowed = lim.Allow(client)
+		}
+		if !allowed {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "rate limit exceeded",
 				"retry_after": "60s",

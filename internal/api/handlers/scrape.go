@@ -138,8 +138,8 @@ func wordCount(text string) int {
 	if text == "" {
 		return 0
 	}
-	count := 0
-	inWord := false
+	var count int
+	var inWord bool
 	for _, r := range text {
 		if unicode.IsSpace(r) {
 			inWord = false
@@ -323,7 +323,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 					results[i] = MultiScrapeItem{URL: u, Error: err.Error()}
 					return nil
 				}
-				title := ""
+				var title string
 				if res.Markdown != "" || res.HTML != "" {
 					title = extractTitle(*res)
 				}
@@ -360,7 +360,7 @@ func (h *ScrapeHandler) Scrape(c *gin.Context) {
 	}
 
 	// Extract title and word count for the summary
-	title := ""
+	var title string
 	if result.Markdown != "" || result.HTML != "" {
 		title = extractTitle(*result)
 	}

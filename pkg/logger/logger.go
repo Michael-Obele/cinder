@@ -7,6 +7,9 @@ import (
 
 var Log *slog.Logger
 
+// Get returns the global logger (prefer this over direct Log access).
+func Get() *slog.Logger { return Log }
+
 func Init(level string) {
 	var logLevel slog.Level
 	switch level {

@@ -87,3 +87,4 @@ node_modules/
 .superpowers/*
 .superpowers/sdd/
 docs/superpowers
+test_reports

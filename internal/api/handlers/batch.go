@@ -155,13 +155,13 @@ func (h *BatchHandler) GetBatchStatus(c *gin.Context) {
 		return
 	}
 
-	var tasks []BatchTask
+	tasks := []BatchTask{}
 	if err := json.Unmarshal(data, &tasks); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "corrupt batch record"})
 		return
 	}
 
-	completed, failed := 0, 0
+	var completed, failed int
 	for i := range tasks {
 		info, err := h.inspector.GetTaskInfo("default", tasks[i].ID)
 		if err != nil {

@@ -10,12 +10,18 @@ import (
 	"github.com/standard-user/cinder/internal/api/middleware"
 	"github.com/standard-user/cinder/internal/config"
 
-	_ "github.com/standard-user/cinder/internal/api/docs" // Include generated swagger docs
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewRouter(cfg *config.Config, logger *slog.Logger, scrapeHandler *handlers.ScrapeHandler, crawlHandler *handlers.CrawlHandler, searchHandler *handlers.SearchHandler, redisClient *redis.Client) *gin.Engine {
+func NewRouter(
+	cfg *config.Config,
+	logger *slog.Logger,
+	scrapeHandler *handlers.ScrapeHandler,
+	crawlHandler *handlers.CrawlHandler,
+	searchHandler *handlers.SearchHandler,
+	redisClient *redis.Client,
+) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}

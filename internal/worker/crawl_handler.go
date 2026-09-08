@@ -181,8 +181,8 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 
 	var mu sync.Mutex
 	visited := map[string]bool{normalizeURL(payload.URL): true}
-	var results []domain.ScrapeResult
-	var failed []FailedURL
+	results := []domain.ScrapeResult{}
+	failed := []FailedURL{}
 	lastRequest := make(map[string]time.Time) // per-host politeness
 	pending := 1                              // the seed entry, not yet picked
 	queued := 1                               // the seed entry, still in the queue
@@ -293,7 +293,7 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 				links := filterByPatterns(extractLinks(result.HTML, entry.url, allowedHost),
 					payload.IncludePaths, payload.ExcludePaths)
 
-				var newEntries []queueEntry
+				newEntries := make([]queueEntry, 0, len(links))
 				mu.Lock()
 				for _, link := range links {
 					normalized := normalizeURL(link)
@@ -338,7 +338,7 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 		}
 	}
 
-	for i := 0; i < crawlConcurrency(); i++ {
+	for range crawlConcurrency() {
 		wg.Add(1)
 		go worker()
 	}
@@ -392,7 +392,12 @@ func (h *CrawlTaskHandler) ExecuteCrawl(ctx context.Context, payload CrawlPayloa
 // bounded by scrapeTimeout (CRAWL_SCRAPE_TIMEOUT) so a slow site can't pin
 // a worker. 4xx errors are never retried (429s included — retrying without
 // honoring Retry-After would just pile on more throttled requests).
-func scrapeWithRetry(ctx context.Context, svc *scraper.Service, url, mode string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+func scrapeWithRetry(
+	ctx context.Context,
+	svc *scraper.Service,
+	url, mode string,
+	opts domain.ScrapeOptions,
+) (*domain.ScrapeResult, error) {
 	maxRetries := crawlMaxRetries()
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -538,7 +543,7 @@ func extractLinks(htmlBody string, pageURL string, allowedHost string) []string 
 		return nil
 	}
 
-	var links []string
+	links := []string{}
 	seen := make(map[string]bool)
 
 	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {

@@ -65,7 +65,7 @@ func (h *ScrapeTaskHandler) ProcessTask(ctx context.Context, t *asynq.Task) erro
 	// For now, we'll just log slightly more detail or potentially return it (Asynq result writing is limited to a byte slice).
 
 	// We can write the result ID or summary to the task info
-	t.ResultWriter().Write([]byte(fmt.Sprintf("Scraped %s successfully", payload.URL)))
+	_, _ = t.ResultWriter().Write(fmt.Appendf(nil, "Scraped %s successfully", payload.URL))
 
 	// TODO: Save 'result' to persistent storage so it can be retrieved via /v1/crawl/:id
 	// For Phase 3, we might largely rely on logs or a simple in-memory/redis cache if we want to show results.

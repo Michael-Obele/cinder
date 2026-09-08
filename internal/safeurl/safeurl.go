@@ -91,9 +91,9 @@ type ErrBlocked struct {
 
 func (e *ErrBlocked) Error() string {
 	if e.IP != "" && e.IP != e.Host {
-		return fmt.Sprintf("blocked request to non-public address %s (%s)", e.Host, e.IP)
+		return fmt.Sprintf("blocked request to non-public address %q (%q)", e.Host, e.IP)
 	}
-	return fmt.Sprintf("blocked request to non-public address %s", e.Host)
+	return fmt.Sprintf("blocked request to non-public address %q", e.Host)
 }
 
 // ErrScheme is returned for non-HTTP(S) URLs. file:// and gopher:// are
@@ -244,7 +244,9 @@ func Dialer() *net.Dialer {
 // (127.0.0.11) intermittently answers SERVFAIL / "server misbehaving" under
 // burst load. Without a retry, a single bad answer fails the whole scrape.
 // NXDOMAIN is not retried — the host genuinely does not exist.
-func retryDialContext(base func(ctx context.Context, network, addr string) (net.Conn, error)) func(ctx context.Context, network, addr string) (net.Conn, error) {
+func retryDialContext(
+	base func(ctx context.Context, network, addr string) (net.Conn, error),
+) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		var lastErr error
 		for attempt := 0; attempt <= dnsRetries; attempt++ {

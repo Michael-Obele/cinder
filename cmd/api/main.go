@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/standard-user/cinder/internal/api/docs" // swagger docs side-effect; keep at app root
+
 	"github.com/standard-user/cinder/internal/api"
 	"github.com/standard-user/cinder/internal/api/handlers"
 	"github.com/standard-user/cinder/internal/config"
@@ -208,7 +210,7 @@ func run() error {
 	//     so a value here would cut real work. The scraper enforces its own
 	//     per-engine deadlines instead.
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%s", cfg.Server.Port),
+		Addr:              ":" + cfg.Server.Port,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

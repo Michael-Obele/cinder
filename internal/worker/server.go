@@ -13,27 +13,33 @@ import (
 	"github.com/standard-user/cinder/internal/scraper"
 )
 
-type AsynqLogger struct {
+type asynqLogger struct {
 	logger *slog.Logger
 }
 
-func (l *AsynqLogger) Debug(args ...interface{}) {
+// AsynqLogger is the exported alias for backward compatibility.
+//
+// Deprecated: use asynqLogger internally; kept exported so external callers
+// can still reference the type if needed.
+type AsynqLogger = asynqLogger
+
+func (l *asynqLogger) Debug(args ...interface{}) {
 	l.logger.Debug(fmt.Sprint(args...))
 }
 
-func (l *AsynqLogger) Info(args ...interface{}) {
+func (l *asynqLogger) Info(args ...interface{}) {
 	l.logger.Info(fmt.Sprint(args...))
 }
 
-func (l *AsynqLogger) Warn(args ...interface{}) {
+func (l *asynqLogger) Warn(args ...interface{}) {
 	l.logger.Warn(fmt.Sprint(args...))
 }
 
-func (l *AsynqLogger) Error(args ...interface{}) {
+func (l *asynqLogger) Error(args ...interface{}) {
 	l.logger.Error(fmt.Sprint(args...))
 }
 
-func (l *AsynqLogger) Fatal(args ...interface{}) {
+func (l *asynqLogger) Fatal(args ...interface{}) {
 	l.logger.Error(fmt.Sprint(args...))
 	os.Exit(1)
 }
@@ -85,7 +91,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *asynq.Server {
 			// process-level SHUTDOWN_TIMEOUT (default 20s) so the re-queue
 			// actually happens instead of being cut off by a SIGKILL.
 			ShutdownTimeout: 10 * time.Second,
-			Logger:          &AsynqLogger{logger: logger},
+			Logger:          &asynqLogger{logger: logger},
 		},
 	)
 
@@ -102,7 +108,12 @@ func RegisterHandlers(mux *asynq.ServeMux, scraper *scraper.Service, logger *slo
 
 // RegisterMonitorHandler registers the monitor:check task handler and
 // returns the handler (its KV is needed by the scheduler).
-func RegisterMonitorHandler(mux *asynq.ServeMux, scraper *scraper.Service, kv KV, logger *slog.Logger) *MonitorTaskHandler {
+func RegisterMonitorHandler(
+	mux *asynq.ServeMux,
+	scraper *scraper.Service,
+	kv KV,
+	logger *slog.Logger,
+) *MonitorTaskHandler {
 	handler := NewMonitorTaskHandler(scraper, kv, logger)
 	mux.HandleFunc(TypeMonitorCheck, handler.ProcessTask)
 	return handler

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -503,7 +504,7 @@ func TestMapLimitClamp(t *testing.T) {
 			var b bytes.Buffer
 			b.WriteString("<urlset>")
 			for i := 0; i < 5; i++ {
-				b.WriteString("<url><loc>" + site.URL + "/p" + string(rune('a'+i)) + "</loc></url>")
+				fmt.Fprintf(&b, "<url><loc>%s/p%c</loc></url>", site.URL, 'a'+i)
 			}
 			b.WriteString("</urlset>")
 			w.Write(b.Bytes())

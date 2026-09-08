@@ -21,6 +21,10 @@ func NewCollyScraper() *CollyScraper {
 }
 
 func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	c := colly.NewCollector(
 		colly.Async(true),
 	)
@@ -36,7 +40,13 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 		logger.Log.Info("Scraping", "url", r.URL, "user_agent", r.Headers.Get("User-Agent"))
 	})
 
-	c.SetRequestTimeout(30 * time.Second)
+	timeout := 30 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		if d := time.Until(deadline); d < timeout {
+			timeout = d
+		}
+	}
+	c.SetRequestTimeout(timeout)
 
 	var htmlContent string
 	var scrapeErr error
@@ -59,7 +69,17 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 		return nil, err
 	}
 
-	c.Wait()
+	done := make(chan struct{})
+	go func() {
+		c.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-done:
+	}
 
 	if scrapeErr != nil {
 		return nil, scrapeErr
@@ -92,7 +112,7 @@ func (s *CollyScraper) Scrape(ctx context.Context, url string, opts domain.Scrap
 	}
 	applyReadabilityMetadata(metadata, rc)
 
-	var links []domain.LinkData
+	links := []domain.LinkData{}
 	if opts.IncludeLinks == nil || *opts.IncludeLinks {
 		links = ExtractLinks(rc.ContentHTML, url)
 	}

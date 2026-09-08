@@ -22,7 +22,7 @@ type HybridService struct {
 // configuration. Extracted to avoid duplication between NewHybridService and
 // NewHybridServiceWithStealth.
 func buildHybridChain(braveAPIKey, searxngEndpoint string) []Service {
-	var chain []Service
+	chain := []Service{}
 	if searxngEndpoint != "" {
 		chain = append(chain, NewSearXNGService(searxngEndpoint))
 	}
@@ -69,7 +69,7 @@ func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 // When no backends are configured, a Service is returned that fails with a
 // clear configuration error.
 func NewHybridServiceWithStealth(braveAPIKey, searxngEndpoint string, fetcher BrowserFetcher) Service {
-	var chain []Service
+	chain := make([]Service, 0, 3)
 	if searxngEndpoint != "" {
 		chain = append(chain, NewSearXNGService(searxngEndpoint))
 	}

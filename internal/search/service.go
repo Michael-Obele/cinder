@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
-// BraveSearchResponse represents the JSON response from Brave Search
-type BraveSearchResponse struct {
+// braveSearchResponse is the JSON response from Brave Search (unexported; internal use only).
+type braveSearchResponse struct {
 	Web struct {
 		Results []struct {
 			Title       string `json:"title"`
@@ -50,12 +51,21 @@ type SearchOptions struct {
 	Rerank         bool
 }
 
-// ValidCategories lists allowed values for Category.
-var ValidCategories = map[string]bool{
+// validCategories is the allowed set for Category (unexported; use IsValidCategory).
+var validCategories = map[string]bool{
 	"general": true,
 	"news":    true,
 	"code":    true,
 }
+
+// ValidCategories lists allowed values for Category.
+//
+// Deprecated: use IsValidCategory instead; this map is mutable and exposed
+// only for backward compatibility.
+var ValidCategories = validCategories
+
+// IsValidCategory reports whether c is an allowed category.
+func IsValidCategory(c string) bool { return validCategories[c] }
 
 // ValidateCategory returns an error if category is non-empty and not in the
 // allowed enum. Mirrors Exa's company/news/people → general/news/code mapping
@@ -65,7 +75,7 @@ func ValidateCategory(c string) error {
 	if c == "" {
 		return nil
 	}
-	if !ValidCategories[c] {
+	if !validCategories[c] {
 		return fmt.Errorf("invalid category %q: must be one of general, news, code", c)
 	}
 	return nil
@@ -141,9 +151,9 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 	// Add query parameters with pagination support
 	q := req.URL.Query()
 	q.Add("q", opts.Query)
-	q.Add("count", fmt.Sprintf("%d", opts.Limit))
+	q.Add("count", strconv.Itoa(opts.Limit))
 	if opts.Offset > 0 {
-		q.Add("offset", fmt.Sprintf("%d", opts.Offset))
+		q.Add("offset", strconv.Itoa(opts.Offset))
 	}
 
 	// Add filtering options if provided
@@ -193,13 +203,13 @@ func (s *BraveService) Search(ctx context.Context, opts SearchOptions) ([]Result
 	}
 
 	// Parse JSON
-	var braveResponse BraveSearchResponse
+	var braveResponse braveSearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&braveResponse); err != nil {
 		return nil, 0, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Convert to Result
-	var results []Result
+	results := make([]Result, 0, len(braveResponse.Web.Results))
 	for idx, item := range braveResponse.Web.Results {
 		results = append(results, Result{
 			Title:       item.Title,
@@ -290,13 +300,13 @@ func rerankTFIDF(query string, results []Result) []Result {
 		if docLen == 0 {
 			docLen = 1
 		}
-		score := 0.0
+		var score float64
 		for _, t := range terms {
 			lt := strings.ToLower(strings.Trim(t, ".,:;!?\"'()[]{}"))
 			if lt == "" {
 				continue
 			}
-			tf := 0.0
+			var tf float64
 			if cnt, ok := termDocs[i][lt]; ok && cnt > 0 {
 				tf = float64(cnt) / docLen
 			} else if strings.Contains(text, lt) {

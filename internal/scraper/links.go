@@ -37,7 +37,7 @@ func ExtractLinks(readabilityHTML, pageURL string) []domain.LinkData {
 	}
 
 	seen := make(map[string]struct{})
-	var links []domain.LinkData
+	links := []domain.LinkData{}
 
 	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		raw, exists := s.Attr("href")
@@ -77,7 +77,7 @@ func ExtractLinks(readabilityHTML, pageURL string) []domain.LinkData {
 			text = strings.Join(strings.Fields(text), " ")
 		}
 
-		isInternal := false
+		var isInternal bool
 		if base != nil {
 			if u, err := url.Parse(abs); err == nil {
 				isInternal = strings.EqualFold(u.Host, base.Host)

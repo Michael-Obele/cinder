@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -128,7 +129,7 @@ func Load() (*Config, error) {
 			port = "6379"
 		}
 
-		addr := fmt.Sprintf("%s:%s", cfg.Redis.Host, port)
+		addr := net.JoinHostPort(cfg.Redis.Host, port)
 		if cfg.Redis.Password != "" {
 			cfg.Redis.URL = fmt.Sprintf("redis://:%s@%s", cfg.Redis.Password, addr)
 		} else {

@@ -75,7 +75,12 @@ func cacheKeyFor(url, mode string, opts domain.ScrapeOptions) string {
 	return "scrape:" + hex.EncodeToString(sum[:])
 }
 
-func (s *Service) Scrape(ctx context.Context, url string, mode string, opts domain.ScrapeOptions) (*domain.ScrapeResult, error) {
+func (s *Service) Scrape(
+	ctx context.Context,
+	url string,
+	mode string,
+	opts domain.ScrapeOptions,
+) (*domain.ScrapeResult, error) {
 	// Default to smart if empty
 	if mode == "" {
 		mode = "smart"
@@ -171,7 +176,7 @@ func (s *Service) Scrape(ctx context.Context, url string, mode string, opts doma
 		result, err = runStatic()
 
 		// Decide whether dynamic is worth a second attempt.
-		needsDynamic := false
+		var needsDynamic bool
 		if err != nil {
 			// Not every static failure is worth retrying: DNS and connection
 			// errors fail identically in a browser, and retrying doubles the

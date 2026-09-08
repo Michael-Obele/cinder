@@ -49,7 +49,7 @@ func Summarize(markdown string, excerpt string, sentences int) string {
 		if len(clean) < 20 {
 			continue // skip fragments
 		}
-		score := 0.0
+		var score float64
 		for _, tok := range wordSplit.Split(strings.ToLower(part), -1) {
 			if f, ok := freq[tok]; ok && len(tok) > 2 {
 				score += float64(f)

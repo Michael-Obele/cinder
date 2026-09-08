@@ -36,7 +36,7 @@ func ExtractPageImages(htmlBody string, pageURL string, maxImages int) []domain.
 		return nil
 	}
 
-	var images []domain.ImageData
+	images := []domain.ImageData{}
 	seen := make(map[string]bool)
 
 	addImage := func(rawURL, alt, title, sourceType string) {
@@ -88,10 +88,14 @@ func ExtractPageImages(htmlBody string, pageURL string, maxImages int) []domain.
 
 		img := domain.ImageData{URL: src, Alt: alt, Title: title, SourceType: sourceContent}
 		if w, _ := s.Attr("width"); w != "" {
-			img.Width, _ = strconv.Atoi(w)
+			if v, err := strconv.Atoi(w); err == nil {
+				img.Width = v
+			}
 		}
 		if h, _ := s.Attr("height"); h != "" {
-			img.Height, _ = strconv.Atoi(h)
+			if v, err := strconv.Atoi(h); err == nil {
+				img.Height = v
+			}
 		}
 		// Image optimizers embed the rendered width in the query string
 		// (e.g. Next.js _next/image?url=...&w=48) — use it for scoring.
@@ -114,7 +118,7 @@ func ExtractPageImages(htmlBody string, pageURL string, maxImages int) []domain.
 	})
 
 	// 4. CSS background images (decorative/hero banners)
-	bgCount := 0
+	var bgCount int
 	doc.Find("[style*='background-image']").Each(func(i int, s *goquery.Selection) {
 		if bgCount >= maxBackgroundImages {
 			return
@@ -174,7 +178,7 @@ func pickImageSource(s *goquery.Selection) string {
 // pickFromSrcset selects the highest-resolution candidate from a srcset
 // attribute (largest width descriptor, falling back to highest density).
 func pickFromSrcset(srcset string) string {
-	best := ""
+	var best string
 	bestW := -1
 	bestD := -1.0
 	for _, part := range strings.Split(srcset, ",") {
@@ -183,7 +187,7 @@ func pickFromSrcset(srcset string) string {
 			continue
 		}
 		candURL := fields[0]
-		descriptor := ""
+		var descriptor string
 		if len(fields) > 1 {
 			descriptor = fields[1]
 		}

@@ -39,7 +39,13 @@ type CrawlPayload struct {
 }
 
 // NewScrapeTask creates a new task for scraping a single URL.
-func NewScrapeTask(url string, render bool, screenshot bool, images bool, imageFormat string) (*asynq.Task, error) {
+func NewScrapeTask(
+	url string,
+	render bool,
+	screenshot bool,
+	images bool,
+	imageFormat string,
+) (*asynq.Task, error) {
 	payload := ScrapePayload{
 		URL:         url,
 		Render:      render,
@@ -64,13 +70,30 @@ type CrawlOptions struct {
 }
 
 // NewCrawlTask creates a new task for crawling a site starting from a seed URL.
-func NewCrawlTask(crawlURL string, render bool, screenshot bool, images bool, imageFormat string, maxDepth int, limit int) (*asynq.Task, error) {
+func NewCrawlTask(
+	crawlURL string,
+	render bool,
+	screenshot bool,
+	images bool,
+	imageFormat string,
+	maxDepth int,
+	limit int,
+) (*asynq.Task, error) {
 	return NewCrawlTaskWithOptions(crawlURL, render, screenshot, images, imageFormat, maxDepth, limit, CrawlOptions{})
 }
 
 // NewCrawlTaskWithOptions is NewCrawlTask plus include/exclude patterns and
 // an optional completion webhook.
-func NewCrawlTaskWithOptions(crawlURL string, render bool, screenshot bool, images bool, imageFormat string, maxDepth int, limit int, opts CrawlOptions) (*asynq.Task, error) {
+func NewCrawlTaskWithOptions(
+	crawlURL string,
+	render bool,
+	screenshot bool,
+	images bool,
+	imageFormat string,
+	maxDepth int,
+	limit int,
+	opts CrawlOptions,
+) (*asynq.Task, error) {
 	payload := CrawlPayload{
 		URL:           crawlURL,
 		Render:        render,
