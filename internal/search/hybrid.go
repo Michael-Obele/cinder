@@ -27,7 +27,10 @@ type HybridService struct {
 // When neither is configured, a Service is returned that fails with a clear
 // message so a misconfigured deployment fails loudly instead of silently
 // returning empty results.
-func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
+// buildHybridChain constructs the SearXNG → Brave backend chain from
+// configuration. Extracted to avoid duplication between NewHybridService and
+// NewHybridServiceWithStealth (review finding: Important #1).
+func buildHybridChain(braveAPIKey, searxngEndpoint string) []Service {
 	var chain []Service
 	if searxngEndpoint != "" {
 		chain = append(chain, NewSearXNGService(searxngEndpoint))
@@ -35,6 +38,11 @@ func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 	if braveAPIKey != "" {
 		chain = append(chain, NewBraveService(braveAPIKey))
 	}
+	return chain
+}
+
+func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
+	chain := buildHybridChain(braveAPIKey, searxngEndpoint)
 
 	switch len(chain) {
 	case 0:
@@ -46,18 +54,12 @@ func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 	}
 }
 
-// NewHybridServiceWithStealth is a stub for Task 1 config hardening.
-// Full 3-backend chain (SearXNG → Brave → Stealth) lands in Task 4.
+// NewHybridServiceWithStealth is a Task 1 stub — will be replaced in Task 4
+// with the full 3-backend chain (SearXNG → Brave → Stealth).
 // When fetcher is nil, behaves like NewHybridService (stealth disabled).
 // When fetcher is non-nil, appends a StealthService as the 3rd backend.
 func NewHybridServiceWithStealth(braveAPIKey, searxngEndpoint string, fetcher BrowserFetcher) Service {
-	var chain []Service
-	if searxngEndpoint != "" {
-		chain = append(chain, NewSearXNGService(searxngEndpoint))
-	}
-	if braveAPIKey != "" {
-		chain = append(chain, NewBraveService(braveAPIKey))
-	}
+	chain := buildHybridChain(braveAPIKey, searxngEndpoint)
 	if fetcher != nil {
 		chain = append(chain, NewStealthService(fetcher, ""))
 	}

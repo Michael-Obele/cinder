@@ -79,8 +79,10 @@ func buildAllocator() (context.Context, context.CancelFunc) {
 }
 
 // stealthFlagsContain reports whether the allocator flags contain the given
-// substring. Stub for Task 1 — always returns false so red tests stay failing
-// while allowing the package to compile. Full stealth flags land in Task 2.
+// substring. Task 1 stub — will be replaced in Task 2 with real stealth flag
+// checks. Always returns false so red tests (chromedp_stealth_test.go) stay
+// failing while allowing the package to compile and `go vet`/`staticcheck`
+// to pass — intentional TDD scaffolding, not a logic change.
 func stealthFlagsContain(flag string) bool { return false }
 
 // warmUp starts the browser synchronously so failures surface at startup.
