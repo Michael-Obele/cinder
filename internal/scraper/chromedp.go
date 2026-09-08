@@ -78,6 +78,11 @@ func buildAllocator() (context.Context, context.CancelFunc) {
 	return chromedp.NewExecAllocator(context.Background(), opts...)
 }
 
+// stealthFlagsContain reports whether the allocator flags contain the given
+// substring. Stub for Task 1 — always returns false so red tests stay failing
+// while allowing the package to compile. Full stealth flags land in Task 2.
+func stealthFlagsContain(flag string) bool { return false }
+
 // warmUp starts the browser synchronously so failures surface at startup.
 func warmUp(allocCtx context.Context) {
 	warmCtx, warmCancel := chromedp.NewContext(allocCtx)

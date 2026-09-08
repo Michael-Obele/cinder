@@ -1,19 +1,28 @@
 # Minimal SearXNG settings for Cinder's self-hosted search backend.
 # `use_default_settings: true` keeps the sane defaults; we only enable the
 # JSON API (Cinder queries it) and pin a local secret key.
-# `engines.remove` drops the engine that CAPTCHAs constantly from
-# datacenter IPs (logs 2026-09-05). Brave kept — user manages it.
+# `engines.remove` drops engines that CAPTCHA/timeout constantly from
+# datacenter IPs (logs 2026-09-05) or are dead/suspended. Brave kept — user manages it.
 use_default_settings:
   engines:
     remove:
       - duckduckgo
+      - ahmia
+      - torch
+      - wikidata
+      - wikipedia
 
 server:
   secret_key: "cinder-local-searxng-secret-4f3a9c1e7b2d"
   limiter: false
   public_instance: false
+  base_url: http://localhost:8889/
+  # SearXNG behind proxy needs real IP; base_url fixes X-Forwarded-For handling
 
 search:
   formats:
     - html
     - json
+
+ui:
+  query_in_title: true

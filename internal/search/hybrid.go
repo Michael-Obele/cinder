@@ -46,6 +46,32 @@ func NewHybridService(braveAPIKey, searxngEndpoint string) Service {
 	}
 }
 
+// NewHybridServiceWithStealth is a stub for Task 1 config hardening.
+// Full 3-backend chain (SearXNG → Brave → Stealth) lands in Task 4.
+// When fetcher is nil, behaves like NewHybridService (stealth disabled).
+// When fetcher is non-nil, appends a StealthService as the 3rd backend.
+func NewHybridServiceWithStealth(braveAPIKey, searxngEndpoint string, fetcher BrowserFetcher) Service {
+	var chain []Service
+	if searxngEndpoint != "" {
+		chain = append(chain, NewSearXNGService(searxngEndpoint))
+	}
+	if braveAPIKey != "" {
+		chain = append(chain, NewBraveService(braveAPIKey))
+	}
+	if fetcher != nil {
+		chain = append(chain, NewStealthService(fetcher, ""))
+	}
+
+	switch len(chain) {
+	case 0:
+		return noBackendService{}
+	case 1:
+		return chain[0]
+	default:
+		return &HybridService{services: chain}
+	}
+}
+
 func (h *HybridService) Search(ctx context.Context, opts SearchOptions) ([]Result, int, error) {
 	var lastErr error
 	for _, s := range h.services {

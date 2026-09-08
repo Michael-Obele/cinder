@@ -1,0 +1,7 @@
+[server]
+# link_token false prevents limiter.toml missing warning
+link_token = false
+
+[botdetection]
+# SearXNG logs: missing limiter.toml + X-Forwarded-For nor X-Real-IP
+# This file silences the warning; actual limiting disabled via settings.yml limiter:false
