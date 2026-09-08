@@ -62,6 +62,7 @@ func TestStealthServiceRespectsContextCancellation(t *testing.T) {
 }
 
 func TestStealthServiceRotatesUA(t *testing.T) {
+	t.Setenv("SSRF_ALLOW_PRIVATE", "true")
 	var uas []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uas = append(uas, r.Header.Get("User-Agent"))

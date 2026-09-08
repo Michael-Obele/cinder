@@ -55,12 +55,28 @@ func NewChromedpScraperWithLimit(recycleAfter int) *ChromedpScraper {
 	return s
 }
 
-// capturedFlags holds the flag names from the last buildAllocator call,
-// exposed for testing via capturedAllocatorFlags and stealthFlagsContain.
-var capturedFlags []string
+// capturedAllocatorFlags returns the stealth flag names baked into
+// buildAllocator. It is a pure function returning a literal so tests do not
+// depend on mutable global state and remain race-free under -race.
+func capturedAllocatorFlags() []string {
+	return []string{
+		"headless",
+		"disable-gpu",
+		"no-sandbox",
+		"disable-dev-shm-usage",
+		"disable-blink-features",
+		"disable-infobars",
+		"excludeSwitches",
+	}
+}
 
-// capturedAllocatorFlags returns the flag names from the last allocator build.
-func capturedAllocatorFlags() []string { return capturedFlags }
+// browserFetcher is the minimal interface satisfied by ChromedpScraper.FetchHTML.
+// Defined locally to avoid an import cycle with internal/search.
+type browserFetcher interface {
+	FetchHTML(context.Context, string) (string, error)
+}
+
+var _ browserFetcher = (*ChromedpScraper)(nil)
 
 // buildAllocator constructs a fresh Chrome exec allocator with stealth flags.
 func buildAllocator() (context.Context, context.CancelFunc) {
@@ -74,16 +90,6 @@ func buildAllocator() (context.Context, context.CancelFunc) {
 		chromedp.Flag("excludeSwitches", "enable-automation"),
 		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"),
 	)
-
-	capturedFlags = []string{
-		"headless",
-		"disable-gpu",
-		"no-sandbox",
-		"disable-dev-shm-usage",
-		"disable-blink-features",
-		"disable-infobars",
-		"excludeSwitches",
-	}
 
 	// Respect CHROME_BIN env var if set (Dockerfile sets it)
 	if chromeBin := os.Getenv("CHROME_BIN"); chromeBin != "" {

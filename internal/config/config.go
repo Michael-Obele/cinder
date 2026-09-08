@@ -27,9 +27,10 @@ type SearchConfig struct {
 	// SearXNG aggregates many engines, so it is more stable than scraping a
 	// single engine and costs nothing beyond one container.
 	SearXNGEndpoint string `mapstructure:"searxng_endpoint"`
-	// STEALTH_ENABLED is read via os.Getenv in cmd/api/main.go (not via
-	// Viper) to avoid config churn. When "true", HybridService reuses the
-	// shared ChromedpScraper as a BrowserFetcher for the stealth fallback.
+	// StealthEnabled, when true, enables the StealthService fallback that
+	// reuses the shared ChromedpScraper as a BrowserFetcher. Bound to
+	// STEALTH_ENABLED via Viper; see Load().
+	StealthEnabled bool `mapstructure:"stealth_enabled"`
 }
 
 type ServerConfig struct {
@@ -91,10 +92,12 @@ func Load() (*Config, error) {
 	v.SetDefault("redis.rest_token", "")
 	v.SetDefault("brave.api_key", "")
 	v.SetDefault("search.searxng_endpoint", "")
+	v.SetDefault("search.stealth_enabled", false)
 
 	// Custom bindings
 	v.BindEnv("brave.api_key", "BRAVE_SEARCH_API_KEY")
 	v.BindEnv("search.searxng_endpoint", "SEARXNG_ENDPOINT")
+	v.BindEnv("search.stealth_enabled", "STEALTH_ENABLED")
 	v.BindEnv("redis.rest_url", "UPSTASH_REDIS_REST_URL")
 	v.BindEnv("redis.rest_token", "UPSTASH_REDIS_REST_TOKEN")
 

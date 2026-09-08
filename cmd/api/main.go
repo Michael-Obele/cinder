@@ -140,11 +140,12 @@ func run() error {
 	// with Brave as an optional fallback when a key is set. Results are
 	// cached in Redis (when available) so repeat queries don't hammer the
 	// upstream engine.
-	// Stealth fallback (Phase 1): when STEALTH_ENABLED=true, reuse the same
-	// ChromedpScraper allocator that the scraper service uses — no second
-	// browser, respects recycleAfter and tini. Disabled by default.
+	// Stealth fallback: when STEALTH_ENABLED=true (via Viper
+	// search.stealth_enabled), reuse the same ChromedpScraper allocator that
+	// the scraper service uses — no second browser, respects recycleAfter
+	// and tini. Disabled by default.
 	var stealthFetcher search.BrowserFetcher
-	if os.Getenv("STEALTH_ENABLED") == "true" {
+	if cfg.Search.StealthEnabled {
 		stealthFetcher = chromedpScraper
 		logger.Log.Info("Stealth search enabled (reusing chromedp allocator)")
 	}

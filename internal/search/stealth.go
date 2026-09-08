@@ -11,6 +11,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/standard-user/cinder/internal/safeurl"
 )
 
 // BrowserFetcher fetches HTML for a URL in a stealth browser tab.
@@ -37,7 +38,7 @@ func NewStealthService(fetcher BrowserFetcher, endpoint string) *StealthService 
 	return &StealthService{
 		fetcher:  fetcher,
 		endpoint: strings.TrimRight(endpoint, "/"),
-		client:   &http.Client{Timeout: 20 * time.Second},
+		client:   safeurl.Client(20 * time.Second),
 	}
 }
 
@@ -52,7 +53,10 @@ func (s *StealthService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 		opts.Limit = 10
 	}
 
-	u, _ := url.Parse(s.endpoint + "/search")
+	u, err := url.Parse(s.endpoint + "/search")
+	if err != nil {
+		return nil, 0, fmt.Errorf("stealth parse endpoint: %w", err)
+	}
 	q := u.Query()
 	q.Set("q", opts.Query)
 	if opts.Offset > 0 {
@@ -61,26 +65,35 @@ func (s *StealthService) Search(ctx context.Context, opts SearchOptions) ([]Resu
 	u.RawQuery = q.Encode()
 
 	var html string
-	var err error
 	if s.fetcher != nil {
-		html, err = s.fetcher.FetchHTML(ctx, u.String())
-		if err != nil {
+		fetched, fetchErr := s.fetcher.FetchHTML(ctx, u.String())
+		if fetchErr != nil {
+			return nil, 0, fmt.Errorf("stealth fetch: %w", fetchErr)
+		}
+		html = fetched
+	} else {
+		if err := safeurl.Check(ctx, u.String()); err != nil {
 			return nil, 0, err
 		}
-	} else {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("stealth request: %w", err)
+		}
 		req.Header.Set("User-Agent", gofakeit.UserAgent())
 		req.Header.Set("Accept", "text/html,application/xhtml+xml")
 		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-		resp, err2 := s.client.Do(req)
-		if err2 != nil {
-			return nil, 0, fmt.Errorf("stealth request: %w", err2)
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, 0, fmt.Errorf("stealth request: %w", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return nil, 0, fmt.Errorf("stealth status %d", resp.StatusCode)
 		}
-		b, _ := io.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, 0, fmt.Errorf("stealth read: %w", err)
+		}
 		html = string(b)
 	}
 

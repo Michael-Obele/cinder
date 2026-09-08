@@ -3,7 +3,9 @@ package search
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
+
+	"github.com/standard-user/cinder/pkg/logger"
 )
 
 // HybridService tries a chain of search backends in order and returns the
@@ -91,7 +93,11 @@ func (h *HybridService) Search(ctx context.Context, opts SearchOptions) ([]Resul
 		}
 		if err != nil {
 			lastErr = err
-			slog.Info("search: backend failed, trying next", "error", err)
+			if logger.Log != nil {
+				logger.Log.Info("search: backend failed, trying next", "backend", fmt.Sprintf("%T", s), "error", err)
+			}
+		} else if logger.Log != nil {
+			logger.Log.Info("search: backend returned empty, trying next", "backend", fmt.Sprintf("%T", s))
 		}
 	}
 	if lastErr != nil {
