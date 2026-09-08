@@ -134,7 +134,17 @@ _(Note: If `screenshot` or `images` are requested, the response payload will als
 
 ## 2. Search
 
-Searches the web using the configured search provider (SearXNG primary, Brave fallback) and returns a list of matching results.
+Searches the web using the configured search provider (SearXNG primary, Brave fallback, Stealth chromedp fallback) and returns a list of matching results.
+
+### Search Backends (HybridService)
+
+Cinder tries backends in order: **SearXNG (free, self-hosted) → Brave API (paid, 1 QPS) → Stealth (chromedp fallback, reuses shared allocator)**.
+
+- `SEARXNG_ENDPOINT=http://searxng:8080` — primary, aggregates many engines
+- `BRAVE_SEARCH_API_KEY` — fallback when SearXNG 429/captcha
+- `STEALTH_ENABLED=true` — enable chromedp fallback (reuses existing Chrome, no new container)
+
+Stealth is last resort: it scrapes Brave Search HTML via the shared chromedp tab with `gofakeit` UA rotation and `disable-blink-features=AutomationControlled`.
 
 ### Endpoints
 

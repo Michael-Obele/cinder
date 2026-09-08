@@ -164,6 +164,16 @@ curl -X POST http://localhost:8080/v1/search \
   -d '{"query": "cinder web scraper", "limit": 5}'
 ```
 
+#### Search Backends (HybridService)
+
+Cinder tries backends in order: **SearXNG (free, self-hosted) → Brave API (paid, 1 QPS) → Stealth (chromedp fallback, reuses shared allocator)**.
+
+- `SEARXNG_ENDPOINT=http://searxng:8080` — primary, aggregates many engines
+- `BRAVE_SEARCH_API_KEY` — fallback when SearXNG 429/captcha
+- `STEALTH_ENABLED=true` — enable chromedp fallback (reuses existing Chrome, no new container)
+
+Stealth is last resort: it scrapes Brave Search HTML via the shared chromedp tab with `gofakeit` UA rotation and `disable-blink-features=AutomationControlled`.
+
 ### 4. Map (no Redis)
 `POST /v1/map` → `{count, links: [{url, source: sitemap|link}]}` — `search` substring filter, `limit` 100 (max 5000).
 
@@ -300,6 +310,7 @@ Sidecar SearXNG on Fly? Same app, second Machine via [`scripts/fly-searxng.sh`](
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | — | Derives `rediss://` URL for Upstash REST → Redis |
 | `SEARXNG_ENDPOINT` | — | `http://localhost:8889` locally, `http://searxng.internal:8080` on Fly |
 | `BRAVE_SEARCH_API_KEY` | — | Fallback when SearXNG unset/unreachable |
+| `STEALTH_ENABLED` | `false` | `true` enables chromedp stealth fallback (reuses shared allocator, no new container) |
 | `APP_API_KEYS` | — | Comma-separated — enables `X-API-Key` auth on `/v1/*` |
 | `APP_RATE_LIMIT_RPM` | `0` | Per-client req/min, 429 + `retry_after` (Redis = sliding window) |
 | `CHROME_RECYCLE_AFTER` | `100` | Restarts allocator every N scrapes — lower to 50 on 512MB if OOM |
