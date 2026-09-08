@@ -11,12 +11,12 @@
 
 ## Prerequisites
 
-| Requirement | Version | Notes |
-|---|---|---|
-| **Go** | 1.25+ | Only for `go run` from source — Docker needs nothing |
-| **Chromium** | Any recent | Auto-installed in Docker; local `go run` needs `chromium` or `google-chrome` on `PATH` |
-| **Docker** (recommended) | 20.10+ | Handles Go + Chromium + Redis + SearXNG in one command |
-| **Redis** | 7+ | Only for `/v1/crawl`, `/v1/batch`, `/v1/monitor` — sync scrape/search/map work without it |
+| Requirement              | Version    | Notes                                                                                     |
+| ------------------------ | ---------- | ----------------------------------------------------------------------------------------- |
+| **Go**                   | 1.25+      | Only for `go run` from source — Docker needs nothing                                      |
+| **Chromium**             | Any recent | Auto-installed in Docker; local `go run` needs `chromium` or `google-chrome` on `PATH`    |
+| **Docker** (recommended) | 20.10+     | Handles Go + Chromium + Redis + SearXNG in one command                                    |
+| **Redis**                | 7+         | Only for `/v1/crawl`, `/v1/batch`, `/v1/monitor` — sync scrape/search/map work without it |
 
 ---
 
@@ -32,7 +32,7 @@ docker compose up -d          # builds api, starts redis + searxng sidecars
 curl http://localhost:8080/health   # → {"status":"ok","service":"cinder"}
 ```
 
-`docker compose` is the fastest path to *every* feature — crawl, batch, monitor, and search all work out of the box. SearXNG is exposed on `http://localhost:8889`.
+`docker compose` is the fastest path to _every_ feature — crawl, batch, monitor, and search all work out of the box. SearXNG is exposed on `http://localhost:8889`.
 
 ### Option B — Single container
 
@@ -86,13 +86,13 @@ curl http://localhost:8889/search?q=cinder&format=json  # SearXNG is up (compose
 
 **If you're paying Firecrawl/Exa by the token or spawning a Playwright per request, you're overpaying.**
 
-| What hurts with hosted APIs | What Cinder gives you instead | Outcome |
-|---|---|---|
-| **$0.01–0.10 per scrape** + rate limits | **$0 self-hosted** — one binary, hobby-tier RAM | Ship RAG without a cloud bill |
-| **500ms Chrome spawn per request** | **One shared allocator + lightweight tabs** | ~200ms static, parallel image + crawl pools |
-| **JS SPAs return empty HTML** | **Smart mode** — static first, fallback to Chromedp on thin shells | Works on React/Vue without you guessing the mode |
-| **Noisy HTML (nav/ads/footer)** | **Readability main-content** + ad block before `html-to-markdown` | Clean markdown your LLM actually wants |
-| **Crawl needs a separate worker fleet** | **Monolith** — Gin + Asynq in one process | Pay per container, not per service |
+| What hurts with hosted APIs             | What Cinder gives you instead                                      | Outcome                                          |
+| --------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| **$0.01–0.10 per scrape** + rate limits | **$0 self-hosted** — one binary, hobby-tier RAM                    | Ship RAG without a cloud bill                    |
+| **500ms Chrome spawn per request**      | **One shared allocator + lightweight tabs**                        | ~200ms static, parallel image + crawl pools      |
+| **JS SPAs return empty HTML**           | **Smart mode** — static first, fallback to Chromedp on thin shells | Works on React/Vue without you guessing the mode |
+| **Noisy HTML (nav/ads/footer)**         | **Readability main-content** + ad block before `html-to-markdown`  | Clean markdown your LLM actually wants           |
+| **Crawl needs a separate worker fleet** | **Monolith** — Gin + Asynq in one process                          | Pay per container, not per service               |
 
 **Proof, not promises:** Self-hosted SearXNG search benchmark (`scripts/search-bench.py`, 10 workers/30s) — **Cinder 560 req/s, p50 11ms** vs Firecrawl self-hosted **1.9 req/s, p50 5.4s** — same $0 cost, ~300× throughput. See [`docs/SEARCH_COMPARISON.md`](docs/SEARCH_COMPARISON.md). Full feature parity in [`docs/EXA_PARITY.md`](docs/EXA_PARITY.md).
 
@@ -114,17 +114,18 @@ Client → Gin Router → Scraper Service (Colly / Chromedp + Readability)
 
 ## Scraping modes
 
-| Mode | Engine | Speed | JS | Use when |
-|---|---|---|---|---|
-| `static` | Colly | ⚡⚡⚡ 200–500ms | ❌ | Classic HTML, blogs, docs |
-| `dynamic` | Chromedp | ⚡ 1–3s | ✅ | React/Vue/SPAs, lazy-loaded |
-| `smart` (default) | Auto | ⚡⚡ | ✅ when needed | You don't want to think about it |
+| Mode              | Engine   | Speed            | JS             | Use when                         |
+| ----------------- | -------- | ---------------- | -------------- | -------------------------------- |
+| `static`          | Colly    | ⚡⚡⚡ 200–500ms | ❌             | Classic HTML, blogs, docs        |
+| `dynamic`         | Chromedp | ⚡ 1–3s          | ✅             | React/Vue/SPAs, lazy-loaded      |
+| `smart` (default) | Auto     | ⚡⚡             | ✅ when needed | You don't want to think about it |
 
 ---
 
 ## API — all under `/v1`
 
 ### 1. Scrape (sync)
+
 `POST /v1/scrape` — fastest path for one page. Also accepts `GET /v1/scrape?url=...` for quick probes. **Sync multi-URL:** `POST /v1/scrape` with `{"urls": ["https://a.com","https://b.com"]}` (max 10, exclusive with `url`) → `{results: [{url, markdown, metadata, ...}]}` in one call — no Redis, errgroup limit 5, mirrors `web_fetch_exa` and Firecrawl `POST /v2/batch/scrape` (see https://docs.firecrawl.dev/features/scrape + https://docs.firecrawl.dev/api-reference/endpoint/scrape).
 
 **Key params:** `url` (required unless `urls` provided), `urls` (max 10, sync batch — exclusive with `url`), `mode` (`smart`/`static`/`dynamic`), `images` + `image_format` (`url`|`blob`), `max_images`, `screenshot` + `screenshot_opts` (`width`/`height`/`full_page`/`format`/`quality`/`wait_selector`), `actions` (`wait_ms`, `wait_selector`, `click`, `scroll_down`, `scroll_to_bottom`), `extract_schema` (CSS selector → `{selector, attr, multiple}`), `summary` + `summary_sentences`, `redact_pii`, `block_ads` (default true), `remove_base64_images` (default true), `include_links` (default true — `links: [{url, text, isInternal}]` after readability, like Firecrawl `formats: ["links"]`). Full table: [`docs/guides/API_REFERENCE.md`](docs/guides/API_REFERENCE.md).
@@ -151,11 +152,13 @@ curl -X POST http://localhost:8080/v1/scrape \
 ```
 
 ### 2. Crawl (async)
+
 `POST /v1/crawl` → `202 {id, url, maxDepth, limit}` · `GET /v1/crawl/:id` → `{state: pending|active|completed|failed, pages[], failed_urls[]}`
 
 Params: `maxDepth` (1–10, default 2), `limit` (1–100, default 10), `include_paths`/`exclude_paths` globs (exclusion wins), `webhook_url` + `webhook_secret` (HMAC `X-Cinder-Signature`), `render`/`screenshot`/`images`. Parallel pool `CRAWL_CONCURRENCY=4` (cap 10), 1s politeness, 2 retries for 5xx (4xx never retried). **Requires `REDIS_URL`.**
 
 ### 3. Search (SearXNG, cached) — highlights + category + rerank
+
 `POST /v1/search` — needs `SEARXNG_ENDPOINT=http://localhost:8889` (Docker: `searxng:8080`) or `BRAVE_SEARCH_API_KEY` as fallback. Repeat queries hit Redis cache (~2ms). Returns `highlights: ["…query window…"]` per result (120-char) + `relevance` reranked. Filters: `includeDomains`, `excludeDomains`, `requiredText`, `maxAge` (1/7/30d), `category` (`general`/`news`/`code`), `rerank` (`true` → TF-IDF pure Go), `limit`/`offset`. `GET /v1/search?query=...&category=news&rerank=true` works too.
 
 ```bash
@@ -175,15 +178,19 @@ Cinder tries backends in order: **SearXNG (free, self-hosted) → Brave API (pai
 Stealth is last resort: it scrapes Brave Search HTML via the shared chromedp tab with `gofakeit` UA rotation and `disable-blink-features=AutomationControlled`.
 
 ### 4. Map (no Redis)
+
 `POST /v1/map` → `{count, links: [{url, source: sitemap|link}]}` — `search` substring filter, `limit` 100 (max 5000).
 
 ### 5. Batch
+
 `POST /v1/batch/scrape` `{urls: []}` (max 20) → `{batch_id, tasks}` · `GET /v1/batch/:id` aggregated. **Requires `REDIS_URL`.**
 
 ### 6. Monitor (change tracking)
+
 `POST /v1/monitor` `{url, interval_seconds >=3600, webhook_url, webhook_secret}` → baseline hash stored, webhook on change → `GET`/`DELETE /v1/monitor/:id`. Markdown SHA-256, Redis + Asynq scheduler. **Requires `REDIS_URL`.**
 
 ### 7. Auth & limits (optional)
+
 Set `APP_API_KEYS=sk_a,sk_b` → `X-API-Key: sk_a` required on `/v1/*` (else 401). `APP_RATE_LIMIT_RPM=60` → 429 + `retry_after`. Redis = sliding window; no Redis = in-memory fallback.
 
 ---
@@ -280,45 +287,45 @@ Sidecar SearXNG on Fly? Same app, second Machine via [`scripts/fly-searxng.sh`](
 
 ## Features — outcomes, not buzzwords
 
-| Feature | Benefit → Outcome |
-|---|---|
-| **Reusable Chrome** + parallel fetch | No spawn tax → 200ms repeat scrapes (gzip Redis 7d), not 17s |
-| **Monolith API+Worker** | One deploy, one bill → hobby-tier viable |
-| **Readability + cleaner** | Strips boilerplate → LLM gets signal, not nav |
-| **Image engine v2** (srcset/picture/lazy, ranked, dimension-sniffed) | Hero, not avatar → better vision RAG |
-| **Page actions** | Click/scroll before capture → lazy content loads |
-| **Deterministic extract** (`extract_schema`) + summary + PII redact | No LLM cost → structured data safely |
-| **Links extraction** (`links: [{url, text, isInternal}]` after readability, deduped) | Firecrawl `formats: ["links"]` parity — `include_links` (default true) |
-| **Sync multi-URL scrape** (`urls: []` max 10, errgroup limit 5) | One call like `web_fetch_exa` / Firecrawl `batch/scrape` → `{results: [{url, markdown, metadata}]}` — no Redis |
-| **Search highlights** (`highlights: ["…query window…"]`) | Firecrawl `highlights:true` parity — 120-char query-biased snippet per result, always returned |
-| **Category filters** (`category: general\|news\|code`) | Exa `category` parity → SearXNG `categories` + Brave `search_type`, cache-aware |
-| **TF-IDF rerank** (`?rerank=true`) | Lightweight pure-Go re-rank (no ONNX) — `tf*idf*0.8 + original*0.2`, `bge-small` alternative without hobby-tier penalty |
-| **Map / Search / Batch / Monitor** | Discover → scrape → watch → webhook → done |
+| Feature                                                                                                     | Benefit → Outcome                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reusable Chrome** + parallel fetch                                                                        | No spawn tax → 200ms repeat scrapes (gzip Redis 7d), not 17s                                                                                                                                   |
+| **Monolith API+Worker**                                                                                     | One deploy, one bill → hobby-tier viable                                                                                                                                                       |
+| **Readability + cleaner**                                                                                   | Strips boilerplate → LLM gets signal, not nav                                                                                                                                                  |
+| **Image engine v2** (srcset/picture/lazy, ranked, dimension-sniffed)                                        | Hero, not avatar → better vision RAG                                                                                                                                                           |
+| **Page actions**                                                                                            | Click/scroll before capture → lazy content loads                                                                                                                                               |
+| **Deterministic extract** (`extract_schema`) + summary + PII redact                                         | No LLM cost → structured data safely                                                                                                                                                           |
+| **Links extraction** (`links: [{url, text, isInternal}]` after readability, deduped)                        | Firecrawl `formats: ["links"]` parity — `include_links` (default true)                                                                                                                         |
+| **Sync multi-URL scrape** (`urls: []` max 10, errgroup limit 5)                                             | One call like `web_fetch_exa` / Firecrawl `batch/scrape` → `{results: [{url, markdown, metadata}]}` — no Redis                                                                                 |
+| **Search highlights** (`highlights: ["…query window…"]`)                                                    | Firecrawl `highlights:true` parity — 120-char query-biased snippet per result, always returned                                                                                                 |
+| **Category filters** (`category: general\|news\|code`)                                                      | Exa `category` parity → SearXNG `categories` + Brave `search_type`, cache-aware                                                                                                                |
+| **TF-IDF rerank** (`?rerank=true`)                                                                          | Lightweight pure-Go re-rank (no ONNX) — `tf*idf*0.8 + original*0.2`, `bge-small` alternative without hobby-tier penalty                                                                        |
+| **Map / Search / Batch / Monitor**                                                                          | Discover → scrape → watch → webhook → done                                                                                                                                                     |
 | **MCP server** (`cinder-tmcp` — [TMCP](https://github.com/paoloricciuti/tmcp) / [tmcp.io](https://tmcp.io)) | Resource-oriented MCP — see [`cinder-tmcp` README](https://github.com/Michael-Obele/cinder-tmcp#readme) for current tools (extract/discover/monitor with `action` multiplexing) — no REST glue |
 
 ---
 
 ## Configuration
 
-| Variable | Default | Why it matters |
-|---|---|---|
-| `SERVER_PORT` | `8080` | HTTP listen port |
-| `SERVER_MODE` | `debug` | `release` disables Swagger + swag regeneration |
-| `LOG_LEVEL` / `APP_LOGLEVEL` | `info` | `debug` shows browser hydration + per-scrape timing |
-| `REDIS_URL` | — | **Required for `/v1/crawl`, `/v1/batch`, `/v1/monitor`** — also enables search cache + rate-limit sliding window |
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | — | Alt to `REDIS_URL` — `host:port` form |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | — | Derives `rediss://` URL for Upstash REST → Redis |
-| `SEARXNG_ENDPOINT` | — | `http://localhost:8889` locally, `http://searxng.internal:8080` on Fly |
-| `BRAVE_SEARCH_API_KEY` | — | Fallback when SearXNG unset/unreachable |
-| `STEALTH_ENABLED` | `false` | `true` enables chromedp stealth fallback (reuses shared allocator, no new container) |
-| `APP_API_KEYS` | — | Comma-separated — enables `X-API-Key` auth on `/v1/*` |
-| `APP_RATE_LIMIT_RPM` | `0` | Per-client req/min, 429 + `retry_after` (Redis = sliding window) |
-| `CHROME_RECYCLE_AFTER` | `100` | Restarts allocator every N scrapes — lower to 50 on 512MB if OOM |
-| `CRAWL_CONCURRENCY` / `CRAWL_DOMAIN_DELAY` | `4` / `1s` | 1–10 workers, politeness delay |
-| `CRAWL_TIMEOUT` / `CRAWL_SCRAPE_TIMEOUT` / `CRAWL_MAX_RETRIES` | `30m` / `30s` / `2` | Crawl deadline / per-page timeout / retry count (4xx never retried) |
-| `SSRF_ALLOW_PRIVATE` | `false` | `true` only for scraping internal wikis — disables SSRF guard |
-| `DISABLE_WORKER` | `false` | `true` = API only, no embedded Asynq worker |
-| `SHUTDOWN_TIMEOUT` | `20` | Must stay below Fly `kill_timeout` (25s) |
+| Variable                                                       | Default             | Why it matters                                                                                                   |
+| -------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `SERVER_PORT`                                                  | `8080`              | HTTP listen port                                                                                                 |
+| `SERVER_MODE`                                                  | `debug`             | `release` disables Swagger + swag regeneration                                                                   |
+| `LOG_LEVEL` / `APP_LOGLEVEL`                                   | `info`              | `debug` shows browser hydration + per-scrape timing                                                              |
+| `REDIS_URL`                                                    | —                   | **Required for `/v1/crawl`, `/v1/batch`, `/v1/monitor`** — also enables search cache + rate-limit sliding window |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`                 | —                   | Alt to `REDIS_URL` — `host:port` form                                                                            |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`          | —                   | Derives `rediss://` URL for Upstash REST → Redis                                                                 |
+| `SEARXNG_ENDPOINT`                                             | —                   | `http://localhost:8889` locally, `http://searxng.internal:8080` on Fly                                           |
+| `BRAVE_SEARCH_API_KEY`                                         | —                   | Fallback when SearXNG unset/unreachable                                                                          |
+| `STEALTH_ENABLED`                                              | `false`             | `true` enables chromedp stealth fallback (reuses shared allocator, no new container)                             |
+| `APP_API_KEYS`                                                 | —                   | Comma-separated — enables `X-API-Key` auth on `/v1/*`                                                            |
+| `APP_RATE_LIMIT_RPM`                                           | `0`                 | Per-client req/min, 429 + `retry_after` (Redis = sliding window)                                                 |
+| `CHROME_RECYCLE_AFTER`                                         | `100`               | Restarts allocator every N scrapes — lower to 50 on 512MB if OOM                                                 |
+| `CRAWL_CONCURRENCY` / `CRAWL_DOMAIN_DELAY`                     | `4` / `1s`          | 1–10 workers, politeness delay                                                                                   |
+| `CRAWL_TIMEOUT` / `CRAWL_SCRAPE_TIMEOUT` / `CRAWL_MAX_RETRIES` | `30m` / `30s` / `2` | Crawl deadline / per-page timeout / retry count (4xx never retried)                                              |
+| `SSRF_ALLOW_PRIVATE`                                           | `false`             | `true` only for scraping internal wikis — disables SSRF guard                                                    |
+| `DISABLE_WORKER`                                               | `false`             | `true` = API only, no embedded Asynq worker                                                                      |
+| `SHUTDOWN_TIMEOUT`                                             | `20`                | Must stay below Fly `kill_timeout` (25s)                                                                         |
 
 All vars also load from `.env` (see [`.env.example`](.env.example)). `REDIS_URL` takes precedence over `REDIS_HOST`/`UPSTASH_*`.
 
@@ -328,12 +335,12 @@ All vars also load from `.env` (see [`.env.example`](.env.example)). `REDIS_URL`
 
 ## Performance
 
-| Operation | Latency | Notes |
-|---|---|---|
-| Static (Colly) | 200–500ms | No JS |
-| Dynamic (Chromedp) | 1–3s | Warm browser; cold start ~1–2s once |
-| Queue enqueue | 5–10ms | Redis |
-| Search (cached) | ~2ms | After first SearXNG hit |
+| Operation          | Latency   | Notes                               |
+| ------------------ | --------- | ----------------------------------- |
+| Static (Colly)     | 200–500ms | No JS                               |
+| Dynamic (Chromedp) | 1–3s      | Warm browser; cold start ~1–2s once |
+| Queue enqueue      | 5–10ms    | Redis                               |
+| Search (cached)    | ~2ms      | After first SearXNG hit             |
 
 `CHROME_RECYCLE_AFTER` bounds leaks; singleton allocator = ~200–300MB steady.
 
@@ -359,12 +366,12 @@ Full walkthrough: [`docs/guides/ARCHITECTURE.md`](docs/guides/ARCHITECTURE.md) �
 
 ## Roadmap
 
-| Phase | Done |
-|---|---|
-| Static/dynamic/smart, queue, auth/limits, perf | ✅ |
-| v2: images v2, map, batch, actions, monitors, extract/summary/PII | ✅ |
-| MCP server (`cinder-tmcp`) — scrape/search/crawl/monitor as AI tools | ✅ |
-| Next: stealth tier (`utls` + CDP stealth), PDF/non-HTML, `pprof` benchmarks, Smart Wait heuristics |  |
+| Phase                                                                                              | Done |
+| -------------------------------------------------------------------------------------------------- | ---- |
+| Static/dynamic/smart, queue, auth/limits, perf                                                     | ✅   |
+| v2: images v2, map, batch, actions, monitors, extract/summary/PII                                  | ✅   |
+| MCP server (`cinder-tmcp`) — scrape/search/crawl/monitor as AI tools                               | ✅   |
+| Next: stealth tier (`utls` + CDP stealth), PDF/non-HTML, `pprof` benchmarks, Smart Wait heuristics |      |
 
 Parity gaps tracked honestly in [`docs/EXA_PARITY.md`](docs/EXA_PARITY.md) — **closed:** highlights, category, TF-IDF rerank, multi-URL sync, links, MCP map/batch; **remaining:** full vector semantic search (TF-IDF is lightweight lite).
 

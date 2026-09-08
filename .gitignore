@@ -84,3 +84,6 @@ node_modules/
 
 # Scratch / local ticket files (cinder-parity, etc.) — not for version control
 .scratch/
+.superpowers/*
+.superpowers/sdd/
+docs/superpowers
