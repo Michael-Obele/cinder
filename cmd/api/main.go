@@ -140,7 +140,15 @@ func run() error {
 	// with Brave as an optional fallback when a key is set. Results are
 	// cached in Redis (when available) so repeat queries don't hammer the
 	// upstream engine.
-	searchSvc := search.NewHybridService(cfg.Brave.APIKey, cfg.Search.SearXNGEndpoint)
+	// Stealth fallback (Phase 1): when STEALTH_ENABLED=true, reuse the same
+	// ChromedpScraper allocator that the scraper service uses — no second
+	// browser, respects recycleAfter and tini. Disabled by default.
+	var stealthFetcher search.BrowserFetcher
+	if os.Getenv("STEALTH_ENABLED") == "true" {
+		stealthFetcher = chromedpScraper
+		logger.Log.Info("Stealth search enabled (reusing chromedp allocator)")
+	}
+	searchSvc := search.NewHybridServiceWithStealth(cfg.Brave.APIKey, cfg.Search.SearXNGEndpoint, stealthFetcher)
 	searchSvc = search.NewCachedService(searchSvc, redisClient)
 	searchHandler := handlers.NewSearchHandler(searchSvc)
 

@@ -27,9 +27,9 @@ type SearchConfig struct {
 	// SearXNG aggregates many engines, so it is more stable than scraping a
 	// single engine and costs nothing beyond one container.
 	SearXNGEndpoint string `mapstructure:"searxng_endpoint"`
-	// NOTE: STEALTH_ENABLED (search.stealth_enabled) will be wired in Task 5
-	// (config wiring + README env table). Env examples already document it as
-	// commented-out `STEALTH_ENABLED=false` until Tasks 2-4 land.
+	// STEALTH_ENABLED is read via os.Getenv in cmd/api/main.go (not via
+	// Viper) to avoid config churn. When "true", HybridService reuses the
+	// shared ChromedpScraper as a BrowserFetcher for the stealth fallback.
 }
 
 type ServerConfig struct {
